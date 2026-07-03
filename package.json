@@ -1,0 +1,14 @@
+{
+  "name": "claim",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @claim/web",
+    "build": "npm run build -w @claim/web",
+    "preview": "npm run preview -w @claim/web",
+    "typecheck": "npm run typecheck -w @claim/web"
+  }
+}

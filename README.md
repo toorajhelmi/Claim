@@ -32,6 +32,12 @@ Claim should be commitment and verification infrastructure, not a betting market
 ## Repository structure
 
 ```text
+apps/
+  web/
+    src/
+      App.tsx
+      main.tsx
+      styles.css
 docs/
   current-direction.md
   product-brief.md
@@ -54,3 +60,13 @@ The next product step is no-code or concierge validation:
 6. No automated payouts until legal and payment-provider review is complete.
 
 Read `docs/current-direction.md` before making product or implementation decisions.
+
+## Local development
+
+This repo is structured as a future monorepo. The first app lives at `apps/web`.
+
+```bash
+npm install
+npm run dev
+npm run build
+```

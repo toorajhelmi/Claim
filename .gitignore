@@ -4,7 +4,11 @@
 !.env.example
 node_modules/
 dist/
+apps/**/dist/
 build/
+*.tsbuildinfo
+apps/**/vite.config.d.ts
+apps/**/vite.config.js
 .vercel/
 .supabase/
 coverage/
