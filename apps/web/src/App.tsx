@@ -15,28 +15,49 @@ type VideoPlaceholder = {
 
 const claimExamples: ClaimExample[] = [
   {
-    title: 'I can write and perform a song live by Friday.',
-    proof: 'Proof: writing clips, rehearsal livestream, final performance.',
-    money: '$2,430',
-    detail: 'pledged by 127 supporters',
+    title:
+      'I will cook a 3-course dinner live in 2 hours using 5 ingredients revealed by supporters at stream start.',
+    proof: 'Proof: sealed ingredient reveal, visible timer, full cooking stream, plated final.',
+    money: '$4,820',
+    detail: 'pledged by 312 supporters',
     status: 'Live',
-    meta: '02d 14h left',
+    meta: 'Starts tonight',
   },
   {
-    title: 'I can cook a 5-course meal from follower ingredients.',
-    proof: 'Proof: ingredient reveal, live cook, plated final, guest notes.',
-    money: '$1,180',
-    detail: 'pledged by 83 supporters',
+    title:
+      'I will build a playable browser game live in 6 hours using a theme and 3 mechanics chosen by supporters at launch.',
+    proof: 'Proof: empty project, live theme reveal, screen share, playable final link.',
+    money: '$6,400',
+    detail: 'pledged by 428 supporters',
     status: 'Proving',
-    meta: 'Final clip due',
+    meta: '4h 12m left',
   },
   {
-    title: 'I can build a playable game prototype in 48 hours.',
-    proof: 'Proof: build stream, timestamps, final demo, reviewer note.',
+    title:
+      'I will create a 60-second horror short live in 4 hours using 3 props chosen by supporters at stream start.',
+    proof: 'Proof: prop reveal, live shoot log, edit timeline, final premiere.',
     money: '$3,840',
     detail: 'earned after verification',
     status: 'Verified',
     meta: 'Paid out',
+  },
+  {
+    title:
+      'I will cross the city by sunset using only live chat directions, with timestamped location check-ins on stream.',
+    proof: 'Proof: live location check-ins, chat log, route recap, sunset deadline.',
+    money: '$2,760',
+    detail: 'pledged by 189 supporters',
+    status: 'Live',
+    meta: 'Sunset deadline',
+  },
+  {
+    title:
+      'I will build a working Rube Goldberg machine live using only household objects chosen by supporters.',
+    proof: 'Proof: supporter object list, live build, one uncut successful run.',
+    money: '$5,210',
+    detail: 'pledged by 341 supporters',
+    status: 'Proving',
+    meta: 'Run pending',
   },
 ];
 
@@ -62,11 +83,11 @@ const videoPlaceholders: VideoPlaceholder[] = [
 ];
 
 const tickerItems = [
-  'I can cook a 5-course meal from follower ingredients.',
-  'I can write and perform a song live by Friday.',
-  'I can beat my 5K time in 30 days.',
-  'I can build a working app in one weekend.',
-  'I can learn enough Arabic for a 10-minute conversation.',
+  'Cook a 3-course dinner live using supporter-revealed ingredients.',
+  'Build a playable browser game live from a supporter-chosen theme.',
+  'Shoot a 60-second horror short live from 3 random props.',
+  'Cross the city by sunset using only live chat directions.',
+  'Build a Rube Goldberg machine from supporter-chosen household objects.',
 ];
 
 const statusClassName: Record<ClaimExample['status'], string> = {
@@ -99,7 +120,49 @@ export function App() {
       </header>
 
       <main>
-        <section className="hero section-shell">
+        <section className="hero dramatic-hero section-shell">
+          <div className="cinema-stage" aria-label="Featured claim video preview">
+            <div className="video-placeholder cinema-video">
+              <div className="cinema-live-bar">
+                <span className="status live">Live soon</span>
+                <span>312 supporters</span>
+                <span>$4,820 pledged</span>
+              </div>
+              <div className="cinema-content">
+                <p className="video-label">Featured claim video placeholder</p>
+                <h2>3 courses. 5 mystery ingredients. 2 hours live.</h2>
+                <p>
+                  Video description: cinematic opening on a sealed ingredient
+                  box, supporter chat counting down, ingredients revealed at
+                  stream start, creator cooking against a visible timer, pledge
+                  counter rising, final plating, guest reaction, then a
+                  VERIFIED result card.
+                </p>
+              </div>
+              <div className="cinema-play" aria-hidden="true">
+                <span />
+              </div>
+            </div>
+
+            <article className="cinema-card cinema-claim-card">
+              <span className="status live">Featured claim</span>
+              <h3>
+                I will cook a 3-course dinner live in 2 hours using 5
+                ingredients revealed by supporters at stream start.
+              </h3>
+            </article>
+
+            <article className="cinema-card cinema-proof-card">
+              <span className="status proving">Proof rules</span>
+              <ul>
+                <li>Ingredients revealed live</li>
+                <li>Visible 2-hour timer</li>
+                <li>Uncut cooking stream</li>
+                <li>Final plated dinner</li>
+              </ul>
+            </article>
+          </div>
+
           <div className="hero-copy">
             <p className="eyebrow">Public claims. Real backing. Verified outcomes.</p>
             <h1>Say it. Stake it. Prove it.</h1>
@@ -130,51 +193,6 @@ export function App() {
                 <span>odds or betting positions</span>
               </div>
             </div>
-          </div>
-
-          <div className="hero-stage" aria-label="Animated product preview">
-            <div className="phone-frame hero-phone">
-              <div className="phone-top">
-                <span />
-                <span />
-              </div>
-              <div className="video-placeholder hero-video">
-                <p className="video-label">Hero video placeholder</p>
-                <h2>Fast vertical reel</h2>
-                <p>
-                  Video description: quick cuts of a creator saying "I can
-                  learn this song by Friday," comments exploding, pledge count
-                  rising, countdown ticking, proof clips, then a big VERIFIED
-                  stamp.
-                </p>
-              </div>
-            </div>
-
-            <article className="floating-card claim-card card-one">
-              <span className="status live">Live claim</span>
-              <h3>I can build a playable game in 48 hours.</h3>
-              <div className="card-meta">
-                <span>$3,840 pledged</span>
-                <span>214 backers</span>
-              </div>
-              <div className="progress-track">
-                <span className="progress-fill progress-fill-68" />
-              </div>
-            </article>
-
-            <article className="floating-card proof-card card-two">
-              <span className="status proving">Proof checklist</span>
-              <ul>
-                <li>Live stream started</li>
-                <li>Prototype submitted</li>
-                <li>Final demo pending</li>
-              </ul>
-            </article>
-
-            <article className="floating-card verified-card card-three">
-              <span>VERIFIED</span>
-              <p>Claim proved by video, checklist, and reviewer notes.</p>
-            </article>
           </div>
         </section>
 
