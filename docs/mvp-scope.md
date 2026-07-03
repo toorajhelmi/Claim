@@ -2,9 +2,20 @@
 
 ## Product
 
-Claim Ship web app for AI-builder shipping commitments.
+Claim web app for public claims, supporter backing, and evidence-backed verification.
 
-## Core screens
+The first product should not be a full marketplace. It should validate whether creators will turn one claim into a paid public event and whether their audiences will pledge to back/watch it.
+
+## Phase 1 screens
+
+- Landing page
+- Example claim cards
+- Challenger application form
+- Supporter waitlist or pledge-interest form
+- Concierge claim page template
+- Final result/proof page
+
+## Productized MVP screens
 
 - Create claim
 - Claim detail page
@@ -18,24 +29,35 @@ Claim Ship web app for AI-builder shipping commitments.
 
 ## Supported claim types
 
-MVP should support only narrow, artifact-based AI shipping claims:
+MVP should support only narrow, template-reviewed claims that are:
 
-- Ship a public AI agent template by date.
-- Ship a GPT/Claude-powered micro-SaaS demo by date.
-- Ship a browser automation workflow with repo, deploy, and demo.
-- Ship an open-source Cursor/AI SDK starter with documented setup.
-- Ship a specific feature into an existing public app by date.
+- time-bound;
+- publicly understandable in a few seconds;
+- documentable or livestreamable;
+- objectively verifiable;
+- interesting enough for an audience to follow;
+- low-risk enough to approve under operating policy.
+
+Initial examples:
+
+- Learn and perform a specific song by a deadline.
+- Build a specific digital artifact in 48 hours.
+- Complete a safe skill challenge with a coach or referee.
+- Finish and publish a creative work by a deadline.
+- Cook, make, write, perform, or build something under a clear constraint.
+- Hit a personal performance target where evidence can be independently checked.
 
 ## Explicitly out of scope
 
 - User-generated freeform challenge text without review.
 - Yes/no betting.
-- Public dare roulette.
-- Weight loss.
+- Public dare roulette without moderation.
+- Medical, body-image, or weight-loss claims.
 - Dangerous live stunts.
-- Revenue/user-growth claims.
-- Vague "launch an app" claims without a locked checklist.
-- Boss-run, speedrun, streamer streak, and creator output claims until Claim Ship proves demand.
+- Illegal, sexual, coercive, humiliating, or harassment-based claims.
+- Revenue/user-growth claims unless a later compliance review approves them.
+- Vague claims without a locked proof checklist.
+- Any supporter-facing promise of investment upside, odds, or betting-style winnings.
 
 ## Preferred payment posture
 
@@ -46,7 +68,7 @@ Desired future flow:
 1. Claimant stake is held through an approved payment/escrow partner.
 2. Supporter pledges are authorized or collected depending on payment-provider capability.
 3. On success:
-   - claimant receives supporter pledge pool minus platform fee;
+   - claimant earns the supporter pledge pool minus platform fee;
    - claimant stake is returned.
 4. On failure:
    - claimant stake routes according to locked failure option;
@@ -60,24 +82,26 @@ Goal: prove people want to create and back claims.
 
 - Landing page with Claim positioning.
 - Waitlist segmented by claimant/supporter.
-- Manual applications for first 20 AI builders.
-- Concierge verification using repo, deploy URL, demo video, checklist, and manual review.
+- Manual applications for the first creator-led claims.
+- Concierge claim pages with countdown, supporter wall, locked proof checklist, and final result.
+- Manual pledge/precommit collection.
+- Manual verification using submitted evidence, livestream/video, third-party records, or referee notes.
 - No automated payouts if legal/payment rails are not ready.
 
 Success signals:
 
 - 100+ waitlist signups from target communities.
-- 20 serious AI builder applications.
-- 5-10 builders willing to stake real money.
+- 20 serious creator/challenger applications.
+- 5-10 challengers willing to stake real money or reputation.
 - 100+ supporters willing to pledge or precommit.
+- Evidence that creators share their claim page without heavy prompting.
 
 ### Phase 2: Closed pilot
 
 Goal: prove the end-to-end challenge lifecycle.
 
-- Run 5-10 verified AI shipping claims.
+- Run 5-10 verified creator-led claims.
 - Use strict templates.
-- Use one or two approved charities.
 - Cap stakes and pledges.
 - Web-only, no app store.
 - Manual human review for all claims.

@@ -1,6 +1,8 @@
 # Trust and Safety
 
-Claim needs strict controls from day one because users are staking money and making public commitments.
+Claim needs strict operating controls from day one because users are staking money, collecting supporter pledges, and making public commitments.
+
+These rules are internal product constraints. Public copy does not need to lead with safety language; the product can present itself broadly as a claims and verification platform while moderation happens behind the scenes.
 
 ## Initial rules
 
@@ -13,7 +15,7 @@ Claim needs strict controls from day one because users are staking money and mak
 - No medical/self-harm claims.
 - No claims requiring trespass or public disruption.
 - No third-party events outside the claimant's control.
-- No highly subjective judging in the first wedge.
+- No claims whose outcome depends mainly on subjective popularity, humiliation, or market success.
 
 ## Operational requirements
 
@@ -35,6 +37,7 @@ These items should be reviewed before implementation:
 - Charity donation routing.
 - Supporter refunds.
 - Supporter rebate routing.
+- Creator payout of supporter pledge pools.
 - Platform fees on success and failure.
 - KYC/AML requirements.
 - Tax reporting.
@@ -50,13 +53,14 @@ Start with:
 - Optional supporter refund/donation.
 - Capped claimant stakes.
 - Capped supporter pledge amounts.
-- Closed or invite-only pilot.
+- Closed or invite-only pilot with creator-led claims.
 - Manual review of every claim.
+- Clear separation between creator monetary upside and supporter non-financial perks/status.
 
 Avoid at launch:
 
 - Supporter rebate.
 - User-created freeform claims.
-- Broad challenge categories.
-- Any message that implies betting, investment upside, resale value, or wagering volume.
+- Unreviewed broad challenge categories.
+- Any message that implies supporter betting, supporter investment upside, resale value, odds, or wagering volume.
 

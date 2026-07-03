@@ -1,28 +1,27 @@
 # Verification
 
-Claim verification should combine objective artifact checks, AI-assisted evidence review, and human arbitration.
+Claim verification should combine objective evidence, AI-assisted review, and human arbitration.
 
-## Claim Ship evidence inputs
+## Evidence inputs
 
-- Public or reviewer-accessible GitHub repo.
-- Commit and PR activity during the claim window.
-- Deployed URL.
-- Demo video or livestream recording.
-- Locked feature checklist.
-- Smoke test or scripted acceptance flow, where practical.
-- README/setup notes.
-- Changelog or release notes.
+- Livestream recording.
+- Short-form or long-form video evidence.
+- Third-party platform timestamps.
+- Referee, coach, moderator, or witness notes.
 - Creator-submitted evidence package.
-- Moderator/referee notes.
+- Locked feature checklist.
+- Public update timeline.
+- Platform analytics or logs, where relevant.
+- Public or reviewer-accessible repo, deploy URL, changelog, or demo for build/software claims.
+- Test result, score, receipt, published artifact, performance record, or other claim-specific proof.
 
 ## Baseline checks
 
-- Repo, deploy, and demo evidence was created or updated during the claim window.
-- Deployed URL is live at review time.
-- Demo shows the locked checklist working without claimant handholding.
-- README documents setup, known limitations, and external dependencies.
-- Prebuilt starter kits, copied templates, and prior work were disclosed before launch.
-- Hardcoded mock flows do not count unless explicitly allowed by the claim template.
+- Evidence was created, updated, or captured during the claim window.
+- The final result maps directly to the locked proof checklist.
+- Video or livestream evidence shows the required outcome clearly enough for review.
+- Any off-camera help, prior work, coaching, templates, editing, or external dependencies were disclosed before launch.
+- Mocked, staged, or assisted outcomes do not count unless explicitly allowed by the claim template.
 - Scope changes after launch are not accepted unless the claim is cancelled and restarted.
 - Dispute packet is clear enough for human review.
 

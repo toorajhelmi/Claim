@@ -9,6 +9,7 @@
 - What KYC/AML checks are required for claimants and supporters?
 - What tax reporting is required for claimant payouts, charity donations, and platform fees?
 - Can Claim custody stake funds directly, or must a regulated partner hold funds?
+- Can creators earn supporter pledge pools without triggering money-transmission, fundraising, contest, or other regulated activity concerns?
 
 ## Failure routing
 
@@ -22,17 +23,18 @@
 
 - Are supporter NFTs free proof collectibles, paid add-ons, or minted only on success?
 - Are supporter badges enough without financial upside?
-- Which supporter perks convert best for AI-builder audiences?
+- Which supporter perks convert best for challenge/proof audiences?
 - Should supporters get private updates during the claim or only final proof?
+- What language makes supporter pledging feel like backing a creator event, not betting on an outcome?
 
 ## Verification and disputes
 
-- How should disputes be handled if repo, deploy, demo, or checklist evidence is ambiguous?
+- How should disputes be handled if livestream, video, third-party record, referee note, or checklist evidence is ambiguous?
 - Who is the human arbitration authority?
 - What is the evidence submission deadline?
 - What is the appeal window?
-- What happens if GitHub, Vercel, Stripe, YouTube, Loom, or another third-party service is unavailable during review?
-- How should prior work, starter kits, templates, and generated code be disclosed?
+- What happens if TikTok, YouTube, Twitch, Kick, Stripe, Loom, GitHub, Vercel, or another third-party service is unavailable during review?
+- How should prior work, training, preparation, coaching, editing, and off-camera assistance be disclosed?
 
 ## Product and launch
 
@@ -42,4 +44,6 @@
 - Should Claim start as concierge pages before account creation exists?
 - Should initial claim pages be editable only by Claim operators?
 - What is the first cohort date and selection process?
+- Which creator categories create the strongest pledge intent: skill, creative, build, cooking, performance, live experiment, or audience-directed claims?
+- What evidence is enough to move from landing page plus concierge validation into building full auth, payments, and dashboards?
 
