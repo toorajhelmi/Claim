@@ -192,23 +192,23 @@ h1 {
   margin-bottom: 1.25rem;
   font-size: clamp(4.25rem, 11vw, 9.25rem);
   font-weight: 900;
-  line-height: 0.88;
-  letter-spacing: -0.075em;
+  line-height: 0.96;
+  letter-spacing: -0.035em;
 }
 
 h2 {
   margin-bottom: 1rem;
   font-size: clamp(2.25rem, 5vw, 4.5rem);
   font-weight: 900;
-  line-height: 0.92;
-  letter-spacing: -0.08em;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
 }
 
 h3 {
   margin-bottom: 0.75rem;
   font-size: 1.25rem;
-  line-height: 1.05;
-  letter-spacing: -0.045em;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
 }
 
 .hero-lede,
@@ -925,8 +925,14 @@ h3 {
 
   h1 {
     font-size: clamp(3.7rem, 18.5vw, 5.35rem);
-    line-height: 0.92;
-    letter-spacing: -0.065em;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+
+  h2 {
+    font-size: clamp(2.35rem, 10vw, 3.4rem);
+    line-height: 1.08;
+    letter-spacing: -0.025em;
   }
 
   .signal-row,
