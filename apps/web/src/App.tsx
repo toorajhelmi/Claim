@@ -16,6 +16,15 @@ type VideoPlaceholder = {
 const claimExamples: ClaimExample[] = [
   {
     title:
+      'I will cross the city by sunset using only live chat directions, with timestamped location check-ins on stream.',
+    proof: 'Proof: live chat directions, timestamped check-ins, route recap, sunset deadline.',
+    money: '$5,940',
+    detail: 'pledged by 386 supporters',
+    status: 'Live',
+    meta: 'Sunset deadline',
+  },
+  {
+    title:
       'I will cook a 3-course dinner live in 2 hours using 5 ingredients revealed by supporters at stream start.',
     proof: 'Proof: sealed ingredient reveal, visible timer, full cooking stream, plated final.',
     money: '$4,820',
@@ -40,15 +49,6 @@ const claimExamples: ClaimExample[] = [
     detail: 'earned after verification',
     status: 'Verified',
     meta: 'Paid out',
-  },
-  {
-    title:
-      'I will cross the city by sunset using only live chat directions, with timestamped location check-ins on stream.',
-    proof: 'Proof: live location check-ins, chat log, route recap, sunset deadline.',
-    money: '$2,760',
-    detail: 'pledged by 189 supporters',
-    status: 'Live',
-    meta: 'Sunset deadline',
   },
   {
     title:
@@ -83,10 +83,10 @@ const videoPlaceholders: VideoPlaceholder[] = [
 ];
 
 const tickerItems = [
+  'Cross the city by sunset using only live chat directions.',
   'Cook a 3-course dinner live using supporter-revealed ingredients.',
   'Build a playable browser game live from a supporter-chosen theme.',
   'Shoot a 60-second horror short live from 3 random props.',
-  'Cross the city by sunset using only live chat directions.',
   'Build a Rube Goldberg machine from supporter-chosen household objects.',
 ];
 
@@ -125,18 +125,19 @@ export function App() {
             <div className="video-placeholder cinema-video">
               <div className="cinema-live-bar">
                 <span className="status live">Live soon</span>
-                <span>312 supporters</span>
-                <span>$4,820 pledged</span>
+                <span>386 supporters</span>
+                <span>$5,940 pledged</span>
               </div>
               <div className="cinema-content">
                 <p className="video-label">Featured claim video placeholder</p>
-                <h2>3 courses. 5 mystery ingredients. 2 hours live.</h2>
+                <h2>Across the city. Chat controls the route. Sunset deadline.</h2>
                 <p>
-                  Video description: cinematic opening on a sealed ingredient
-                  box, supporter chat counting down, ingredients revealed at
-                  stream start, creator cooking against a visible timer, pledge
-                  counter rising, final plating, guest reaction, then a
-                  VERIFIED result card.
+                  Video description: cinematic opening on the creator at the
+                  starting point with the sun still high, live chat throwing
+                  directions on screen, map route updating, timestamped
+                  location check-ins, near-misses before sunset, pledge counter
+                  rising, final destination arrival, then a VERIFIED result
+                  card.
                 </p>
               </div>
               <div className="cinema-play" aria-hidden="true">
@@ -147,18 +148,18 @@ export function App() {
             <article className="cinema-card cinema-claim-card">
               <span className="status live">Featured claim</span>
               <h3>
-                I will cook a 3-course dinner live in 2 hours using 5
-                ingredients revealed by supporters at stream start.
+                I will cross the city by sunset using only live chat
+                directions, with timestamped location check-ins on stream.
               </h3>
             </article>
 
             <article className="cinema-card cinema-proof-card">
               <span className="status proving">Proof rules</span>
               <ul>
-                <li>Ingredients revealed live</li>
-                <li>Visible 2-hour timer</li>
-                <li>Uncut cooking stream</li>
-                <li>Final plated dinner</li>
+                <li>Route controlled by live chat</li>
+                <li>Timestamped check-ins</li>
+                <li>Continuous stream updates</li>
+                <li>Arrive before sunset</li>
               </ul>
             </article>
           </div>
