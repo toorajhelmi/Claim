@@ -96,6 +96,8 @@ const statusClassName: Record<ClaimExample['status'], string> = {
   Verified: 'verified',
 };
 
+const heroVideoSrc = '/videos/Cinematic_vertical_social_vide.mp4';
+
 export function App() {
   return (
     <>
@@ -123,6 +125,16 @@ export function App() {
         <section className="hero dramatic-hero section-shell">
           <div className="cinema-stage" aria-label="Featured claim video preview">
             <div className="video-placeholder cinema-video">
+              <video
+                className="cinema-video-media"
+                src={heroVideoSrc}
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="metadata"
+                aria-label="Cinematic video preview of a creator crossing the city by sunset with live chat directions"
+              />
               <div className="cinema-live-bar">
                 <span className="status live">Live soon</span>
                 <span>386 supporters</span>
