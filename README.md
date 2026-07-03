@@ -35,4 +35,3 @@ The next product step is no-code or concierge validation:
 3. Concierge claim pages.
 4. Manual evidence review.
 5. No automated payouts until legal and payment-provider review is complete.
-
