@@ -655,6 +655,7 @@ function AppChrome({ children }: { children: ReactNode }) {
 
 function AuthPage({ nextPath }: { nextPath: string }) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [authStage, setAuthStage] = useState<'form' | 'check-email'>('form');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [confirmationEmail, setConfirmationEmail] = useState('');
@@ -727,9 +728,9 @@ function AuthPage({ nextPath }: { nextPath: string }) {
 
     if (!data.session || !data.user) {
       setStatus('success');
-      setMessage('Account created. Confirm your email, then sign in to run a claim.');
+      setMessage('Confirmation email sent. Check inbox and spam/promotions.');
       setConfirmationEmail(values.email.trim());
-      setMode('signin');
+      setAuthStage('check-email');
       return;
     }
 
@@ -774,74 +775,129 @@ function AuthPage({ nextPath }: { nextPath: string }) {
     setMessage('Confirmation email resent. Check inbox and spam/promotions.');
   }
 
+  async function handleContinueAfterConfirmation() {
+    if (!confirmationEmail) return;
+
+    setStatus('submitting');
+    setMessage('');
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: confirmationEmail,
+      password: values.password,
+    });
+
+    if (error) {
+      setStatus('error');
+      setMessage(
+        error.message.toLowerCase().includes('confirm')
+          ? 'Email is not confirmed yet. Open the confirmation email first, then tap continue.'
+          : error.message,
+      );
+      return;
+    }
+
+    window.location.href = safeNextPath;
+  }
+
+  function handleEditSignup() {
+    setAuthStage('form');
+    setMode('signup');
+    setStatus('idle');
+    setMessage('');
+  }
+
   return (
     <AppChrome>
       <main className="auth-page section-shell">
         <section className="auth-card">
           <p className="eyebrow">Claimer access</p>
-          <h1>{mode === 'signin' ? 'Sign in to run a claim.' : 'Create your claimer account.'}</h1>
-          <p>
-            Claim setup starts after account access, so the wizard only asks for claim details.
-          </p>
+          {authStage === 'check-email' ? (
+            <>
+              <h1>Check your email.</h1>
+              <p>
+                We sent a confirmation link to <strong>{confirmationEmail}</strong>. After opening it,
+                return here and continue to claim setup.
+              </p>
+              <div className="confirmation-actions">
+                <button
+                  className="button button-primary"
+                  type="button"
+                  onClick={() => void handleContinueAfterConfirmation()}
+                  disabled={status === 'submitting'}
+                >
+                  {status === 'submitting' ? 'Checking...' : 'I confirmed, continue'}
+                </button>
+                <button
+                  className="button button-ghost"
+                  type="button"
+                  onClick={() => void handleResendConfirmation()}
+                  disabled={status === 'submitting'}
+                >
+                  Resend email
+                </button>
+                <button className="text-button" type="button" onClick={handleEditSignup}>
+                  Change email or details
+                </button>
+              </div>
+              {message ? <p className="form-message">{message}</p> : null}
+            </>
+          ) : (
+            <>
+              <h1>{mode === 'signin' ? 'Sign in to run a claim.' : 'Create your claimer account.'}</h1>
+              <p>
+                Claim setup starts after account access, so the wizard only asks for claim details.
+              </p>
 
-          <div className="auth-toggle" role="group" aria-label="Authentication mode">
-            <button className={mode === 'signin' ? 'selected' : ''} type="button" onClick={() => setMode('signin')}>
-              Sign in
-            </button>
-            <button className={mode === 'signup' ? 'selected' : ''} type="button" onClick={() => setMode('signup')}>
-              Sign up
-            </button>
-          </div>
+              <div className="auth-toggle" role="group" aria-label="Authentication mode">
+                <button className={mode === 'signin' ? 'selected' : ''} type="button" onClick={() => setMode('signin')}>
+                  Sign in
+                </button>
+                <button className={mode === 'signup' ? 'selected' : ''} type="button" onClick={() => setMode('signup')}>
+                  Sign up
+                </button>
+              </div>
 
-          <form className="auth-form" onSubmit={(event) => void handleSubmit(event)}>
-            {mode === 'signup' ? (
-              <>
+              <form className="auth-form" onSubmit={(event) => void handleSubmit(event)}>
+                {mode === 'signup' ? (
+                  <>
+                    <label>
+                      Name
+                      <input value={values.displayName} onChange={(event) => updateValue('displayName', event.target.value)} placeholder="Your name" />
+                    </label>
+                    <label>
+                      Handle
+                      <input value={values.handle} onChange={(event) => updateValue('handle', event.target.value)} placeholder="@yourhandle" />
+                    </label>
+                    <label>
+                      Main platform
+                      <select value={values.primaryPlatform} onChange={(event) => updateValue('primaryPlatform', event.target.value)}>
+                        <option value="" disabled>
+                          Select platform
+                        </option>
+                        {platformOptions.map(([value, label]) => (
+                          <option value={value} key={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </>
+                ) : null}
                 <label>
-                  Name
-                  <input value={values.displayName} onChange={(event) => updateValue('displayName', event.target.value)} placeholder="Your name" />
+                  Email
+                  <input value={values.email} type="email" onChange={(event) => updateValue('email', event.target.value)} placeholder="you@example.com" />
                 </label>
                 <label>
-                  Handle
-                  <input value={values.handle} onChange={(event) => updateValue('handle', event.target.value)} placeholder="@yourhandle" />
+                  Password
+                  <input value={values.password} type="password" onChange={(event) => updateValue('password', event.target.value)} placeholder="At least 6 characters" />
                 </label>
-                <label>
-                  Main platform
-                  <select value={values.primaryPlatform} onChange={(event) => updateValue('primaryPlatform', event.target.value)}>
-                    <option value="" disabled>
-                      Select platform
-                    </option>
-                    {platformOptions.map(([value, label]) => (
-                      <option value={value} key={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </>
-            ) : null}
-            <label>
-              Email
-              <input value={values.email} type="email" onChange={(event) => updateValue('email', event.target.value)} placeholder="you@example.com" />
-            </label>
-            <label>
-              Password
-              <input value={values.password} type="password" onChange={(event) => updateValue('password', event.target.value)} placeholder="At least 6 characters" />
-            </label>
-            <button className="button button-primary" type="submit" disabled={!canSubmit || status === 'submitting'}>
-              {status === 'submitting' ? 'Working...' : mode === 'signin' ? 'Sign in and continue' : 'Create account'}
-            </button>
-          </form>
-          {message ? <p className="form-message">{message}</p> : null}
-          {confirmationEmail ? (
-            <button
-              className="text-button"
-              type="button"
-              onClick={() => void handleResendConfirmation()}
-              disabled={status === 'submitting'}
-            >
-              Resend confirmation email
-            </button>
-          ) : null}
+                <button className="button button-primary" type="submit" disabled={!canSubmit || status === 'submitting'}>
+                  {status === 'submitting' ? 'Working...' : mode === 'signin' ? 'Sign in and continue' : 'Create account'}
+                </button>
+              </form>
+              {message ? <p className="form-message">{message}</p> : null}
+            </>
+          )}
         </section>
       </main>
     </AppChrome>

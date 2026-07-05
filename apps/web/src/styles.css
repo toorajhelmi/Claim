@@ -1362,6 +1362,11 @@ h3 {
   gap: 0.85rem;
 }
 
+.confirmation-actions {
+  display: grid;
+  gap: 0.8rem;
+}
+
 .auth-form label {
   display: grid;
   gap: 0.5rem;
