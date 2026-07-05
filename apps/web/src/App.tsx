@@ -148,6 +148,14 @@ type Claim = {
   proof_summary: string | null;
 };
 
+type ClaimerProfile = {
+  id: string;
+  display_name: string | null;
+  handle: string | null;
+  contact_email: string | null;
+  primary_platform: string | null;
+};
+
 type ProofRule = {
   id: string;
   position: number;
@@ -227,6 +235,10 @@ export function App() {
 
   if (route.name === 'new-claim') {
     return <CreateClaimPage />;
+  }
+
+  if (route.name === 'auth') {
+    return <AuthPage nextPath={route.nextPath} />;
   }
 
   if (route.name === 'claim-detail') {
@@ -571,12 +583,18 @@ function VideoPlaceholderCard({ label, title, description }: VideoPlaceholder) {
 
 function getRoute(pathname: string):
   | { name: 'landing' }
+  | { name: 'auth'; nextPath: string }
   | { name: 'new-claim' }
   | { name: 'claim-detail'; slug: string }
   | { name: 'claim-live'; slug: string }
   | { name: 'claim-result'; slug: string }
   | { name: 'recorder-invite'; token: string } {
   const parts = pathname.split('/').filter(Boolean);
+
+  if (parts[0] === 'auth') {
+    const params = new URLSearchParams(window.location.search);
+    return { name: 'auth', nextPath: params.get('next') || '/claims/new' };
+  }
 
   if (parts[0] === 'claims' && parts[1] === 'new') {
     return { name: 'new-claim' };
@@ -626,12 +644,164 @@ function AppChrome({ children }: { children: ReactNode }) {
   );
 }
 
+function AuthPage({ nextPath }: { nextPath: string }) {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+  const [values, setValues] = useState({
+    displayName: '',
+    handle: '',
+    email: '',
+    password: '',
+    primaryPlatform: '',
+  });
+  const safeNextPath = nextPath.startsWith('/') ? nextPath : '/claims/new';
+  const canSubmit =
+    values.email.trim().length > 0 &&
+    values.password.trim().length >= 6 &&
+    (mode === 'signin' ||
+      (values.displayName.trim().length > 0 &&
+        values.handle.trim().length > 0 &&
+        values.primaryPlatform.trim().length > 0));
+
+  function updateValue(key: keyof typeof values, value: string) {
+    setValues((currentValues) => ({
+      ...currentValues,
+      [key]: value,
+    }));
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSubmit) return;
+
+    setStatus('submitting');
+    setMessage('');
+
+    if (mode === 'signin') {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: values.email.trim(),
+        password: values.password,
+      });
+
+      if (error) {
+        setStatus('error');
+        setMessage(error.message);
+        return;
+      }
+
+      window.location.href = safeNextPath;
+      return;
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+      email: values.email.trim(),
+      password: values.password,
+      options: {
+        data: {
+          display_name: values.displayName.trim(),
+          handle: values.handle.trim(),
+          primary_platform: values.primaryPlatform,
+          role: 'claimer',
+        },
+      },
+    });
+
+    if (error) {
+      setStatus('error');
+      setMessage(error.message);
+      return;
+    }
+
+    if (!data.session || !data.user) {
+      setStatus('success');
+      setMessage('Account created. Confirm your email, then sign in to run a claim.');
+      setMode('signin');
+      return;
+    }
+
+    const { error: profileError } = await supabase.from('profiles').upsert({
+      id: data.user.id,
+      display_name: values.displayName.trim(),
+      handle: nullableString(values.handle),
+      contact_email: values.email.trim(),
+      primary_platform: values.primaryPlatform,
+    });
+
+    if (profileError) {
+      setStatus('error');
+      setMessage(profileError.message);
+      return;
+    }
+
+    window.location.href = safeNextPath;
+  }
+
+  return (
+    <AppChrome>
+      <main className="auth-page section-shell">
+        <section className="auth-card">
+          <p className="eyebrow">Claimer access</p>
+          <h1>{mode === 'signin' ? 'Sign in to run a claim.' : 'Create your claimer account.'}</h1>
+          <p>
+            Claim setup starts after account access, so the wizard only asks for claim details.
+          </p>
+
+          <div className="auth-toggle" role="group" aria-label="Authentication mode">
+            <button className={mode === 'signin' ? 'selected' : ''} type="button" onClick={() => setMode('signin')}>
+              Sign in
+            </button>
+            <button className={mode === 'signup' ? 'selected' : ''} type="button" onClick={() => setMode('signup')}>
+              Sign up
+            </button>
+          </div>
+
+          <form className="auth-form" onSubmit={(event) => void handleSubmit(event)}>
+            {mode === 'signup' ? (
+              <>
+                <label>
+                  Name
+                  <input value={values.displayName} onChange={(event) => updateValue('displayName', event.target.value)} placeholder="Your name" />
+                </label>
+                <label>
+                  Handle
+                  <input value={values.handle} onChange={(event) => updateValue('handle', event.target.value)} placeholder="@yourhandle" />
+                </label>
+                <label>
+                  Main platform
+                  <select value={values.primaryPlatform} onChange={(event) => updateValue('primaryPlatform', event.target.value)}>
+                    <option value="" disabled>
+                      Select platform
+                    </option>
+                    {platformOptions.map(([value, label]) => (
+                      <option value={value} key={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            ) : null}
+            <label>
+              Email
+              <input value={values.email} type="email" onChange={(event) => updateValue('email', event.target.value)} placeholder="you@example.com" />
+            </label>
+            <label>
+              Password
+              <input value={values.password} type="password" onChange={(event) => updateValue('password', event.target.value)} placeholder="At least 6 characters" />
+            </label>
+            <button className="button button-primary" type="submit" disabled={!canSubmit || status === 'submitting'}>
+              {status === 'submitting' ? 'Working...' : mode === 'signin' ? 'Sign in and continue' : 'Create account'}
+            </button>
+          </form>
+          {message ? <p className="form-message">{message}</p> : null}
+        </section>
+      </main>
+    </AppChrome>
+  );
+}
+
 type ClaimWizardValues = {
-  creatorName: string;
-  creatorHandle: string;
-  contactEmail: string;
-  password: string;
-  creatorPlatform: string;
   title: string;
   description: string;
   proofRules: string;
@@ -668,44 +838,6 @@ const platformOptions: Array<[string, string]> = [
 ];
 
 const claimWizardSteps: ClaimWizardStep[] = [
-  {
-    key: 'creatorName',
-    label: 'What is your name?',
-    helper: 'This creates the claimer profile people will see on the claim page.',
-    placeholder: 'Your name',
-    required: true,
-  },
-  {
-    key: 'creatorHandle',
-    label: 'What handle should supporters recognize?',
-    helper: 'Use your main public handle. You can change this later.',
-    placeholder: '@yourhandle',
-    required: true,
-  },
-  {
-    key: 'contactEmail',
-    label: 'What email should we use for your claimer account?',
-    helper: 'You will use this email to sign in and manage claims.',
-    placeholder: 'you@example.com',
-    inputType: 'email',
-    required: true,
-  },
-  {
-    key: 'password',
-    label: 'Create a password',
-    helper: 'Use at least 6 characters. If email confirmation is enabled, you may need to confirm before publishing.',
-    placeholder: 'Create password',
-    inputType: 'password',
-    required: true,
-  },
-  {
-    key: 'creatorPlatform',
-    label: 'Where is your main audience?',
-    helper: 'This helps supporters understand where they know you from.',
-    fieldType: 'select',
-    options: platformOptions,
-    required: true,
-  },
   {
     key: 'title',
     label: 'What is the claim?',
@@ -779,11 +911,6 @@ const claimWizardSteps: ClaimWizardStep[] = [
 
 function CreateClaimPage() {
   const [values, setValues] = useState<ClaimWizardValues>({
-    creatorName: '',
-    creatorHandle: '',
-    contactEmail: '',
-    password: '',
-    creatorPlatform: '',
     title: '',
     description: '',
     proofRules: '',
@@ -794,12 +921,58 @@ function CreateClaimPage() {
     liveStartsAt: '',
     deadlineAt: '',
   });
+  const [claimerProfile, setClaimerProfile] = useState<ClaimerProfile | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const currentStep = claimWizardSteps[currentStepIndex];
   const isReviewStep = currentStepIndex === claimWizardSteps.length;
   const progress = Math.round(((currentStepIndex + 1) / (claimWizardSteps.length + 1)) * 100);
+  const canContinue = isReviewStep || !currentStep.required || values[currentStep.key].trim().length > 0;
+
+  useEffect(() => {
+    async function loadClaimer() {
+      const { data: userData } = await supabase.auth.getUser();
+
+      if (!userData.user) {
+        window.location.href = `/auth?next=${encodeURIComponent('/claims/new')}`;
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, display_name, handle, contact_email, primary_platform')
+        .eq('id', userData.user.id)
+        .maybeSingle();
+
+      if (profile) {
+        setClaimerProfile(profile as ClaimerProfile);
+        setAuthLoading(false);
+        return;
+      }
+
+      const metadata = userData.user.user_metadata;
+      const fallbackProfile = {
+        id: userData.user.id,
+        display_name: String(metadata.display_name ?? userData.user.email?.split('@')[0] ?? 'Claimer'),
+        handle: nullableString(String(metadata.handle ?? '')),
+        contact_email: userData.user.email ?? null,
+        primary_platform: nullableString(String(metadata.primary_platform ?? '')),
+      };
+
+      const { data: createdProfile } = await supabase
+        .from('profiles')
+        .upsert(fallbackProfile)
+        .select('id, display_name, handle, contact_email, primary_platform')
+        .single();
+
+      setClaimerProfile((createdProfile ?? fallbackProfile) as ClaimerProfile);
+      setAuthLoading(false);
+    }
+
+    void loadClaimer();
+  }, []);
 
   function updateValue(key: keyof ClaimWizardValues, value: string) {
     setValues((currentValues) => ({
@@ -830,63 +1003,26 @@ function CreateClaimPage() {
     setStatus('submitting');
     setMessage('');
 
+    if (!claimerProfile) {
+      setStatus('error');
+      setMessage('Sign in before creating a claim.');
+      return;
+    }
+
     const title = values.title.trim();
-    const creatorName = values.creatorName.trim();
+    const creatorName = claimerProfile.display_name || claimerProfile.contact_email?.split('@')[0] || 'Claimer';
     const slug = createSlug(title);
     const proofRules = parseProofRules(values.proofRules);
     const liveSetup = nullableString(values.liveSetup);
     const supporterInteraction = nullableString(values.supporterInteraction);
-    const { data: existingUser } = await supabase.auth.getUser();
-    let userId = existingUser.user?.id ?? null;
-
-    if (!userId) {
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: values.contactEmail.trim(),
-        password: values.password,
-        options: {
-          data: {
-            display_name: creatorName,
-            handle: values.creatorHandle.trim(),
-            role: 'claimer',
-          },
-        },
-      });
-
-      if (signUpError) {
-        setStatus('error');
-        setMessage(signUpError.message);
-        return;
-      }
-
-      if (!signUpData.session || !signUpData.user) {
-        setStatus('success');
-        setMessage('Account created. Confirm your email, then return to create your claim.');
-        return;
-      }
-
-      userId = signUpData.user.id;
-    }
-
-    const { error: profileError } = await supabase.from('profiles').upsert({
-      id: userId,
-      display_name: creatorName,
-      handle: nullableString(values.creatorHandle),
-      contact_email: nullableString(values.contactEmail),
-    });
-
-    if (profileError) {
-      setStatus('error');
-      setMessage(profileError.message);
-      return;
-    }
 
     const claimPayload = {
       slug,
-      creator_id: userId,
+      creator_id: claimerProfile.id,
       creator_name: creatorName,
-      creator_handle: nullableString(values.creatorHandle),
-      creator_platform: nullableString(values.creatorPlatform),
-      contact_email: nullableString(values.contactEmail),
+      creator_handle: nullableString(claimerProfile.handle),
+      creator_platform: nullableString(claimerProfile.primary_platform),
+      contact_email: nullableString(claimerProfile.contact_email),
       claim_type: 'live_claim' as const,
       status: 'open_for_backing' as const,
       title,
@@ -949,13 +1085,17 @@ function CreateClaimPage() {
     window.location.href = `/claims/${claim.slug}`;
   }
 
+  if (authLoading) {
+    return <LoadingPage label="Checking claimer account..." />;
+  }
+
   return (
     <AppChrome>
       <main className="app-page section-shell">
         <p className="eyebrow">Create claim</p>
         <h1 className="page-title">Launch a live proof claim.</h1>
         <p className="page-lede">
-          First create the claimer account, then define the public claim one decision at a time.
+          You are signed in. Now define the public claim one decision at a time.
         </p>
 
         <section className="wizard-card">
@@ -973,15 +1113,17 @@ function CreateClaimPage() {
           )}
 
           <div className="wizard-actions">
-            <button className="button button-ghost" type="button" onClick={goBack} disabled={currentStepIndex === 0 || status === 'submitting'}>
-              Back
-            </button>
+            {currentStepIndex > 0 ? (
+              <button className="button button-ghost" type="button" onClick={goBack} disabled={status === 'submitting'}>
+                Back
+              </button>
+            ) : null}
             {isReviewStep ? (
               <button className="button button-primary" type="button" onClick={() => void handleCreateClaim()} disabled={status === 'submitting'}>
-                {status === 'submitting' ? 'Creating...' : 'Create account and claim'}
+                {status === 'submitting' ? 'Creating...' : 'Create claim'}
               </button>
             ) : (
-              <button className="button button-primary" type="button" onClick={goNext}>
+              <button className="button button-primary" type="button" onClick={goNext} disabled={!canContinue}>
                 Continue
               </button>
             )}
@@ -1040,9 +1182,6 @@ function WizardField({
 
 function ClaimWizardReview({ values }: { values: ClaimWizardValues }) {
   const reviewItems: Array<[string, string]> = [
-    ['Claimer', `${values.creatorName} ${values.creatorHandle ? `(${values.creatorHandle})` : ''}`],
-    ['Email', values.contactEmail],
-    ['Platform', values.creatorPlatform],
     ['Claim', values.title],
     ['Proof', values.proofRules],
     ['Live setup', values.liveSetup],
@@ -1057,7 +1196,7 @@ function ClaimWizardReview({ values }: { values: ClaimWizardValues }) {
     <div className="wizard-review">
       <h2>Review the claim setup.</h2>
       <p>
-        This will create a claimer account, create the claim preview page, and open it
+        This will create the claim preview page under your claimer account and open it
         for supporters to pledge.
       </p>
       <div className="review-list">
