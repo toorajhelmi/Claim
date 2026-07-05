@@ -71,15 +71,15 @@ const claimExamples: ClaimExample[] = [
 const videoPlaceholders: VideoPlaceholder[] = [
   {
     label: 'Video area 1',
-    title: 'Creator announcement reel',
+    title: 'Claimer announcement reel',
     description:
-      'Vertical social video. Creator talks directly to camera, makes a bold claim, shows the stake, and points to a countdown plus supporter wall.',
+      'Vertical social video. Claimer talks directly to camera, makes a bold claim, shows the stake, and points to a countdown plus supporter wall.',
   },
   {
     label: 'Video area 2',
     title: 'Pledge surge moment',
     description:
-      'Fast montage of comments, supporter avatars, and pledge counter rising while the creator reacts to the audience backing the attempt.',
+      'Fast montage of comments, supporter avatars, and pledge counter rising while the claimer reacts to the audience backing the attempt.',
   },
   {
     label: 'Video area 3',
@@ -205,13 +205,13 @@ const defaultCityRules = [
   'Live stream starts at the declared start point.',
   'Route decisions must come from live supporter chat or votes.',
   'Timestamped check-ins are submitted during the route.',
-  'Challenger reaches the destination before the sunset deadline.',
+  'Claimer reaches the destination before the sunset deadline.',
 ];
 
 const defaultStatementRules = [
   'Exact statement or question is locked before pledges open.',
   'Public event/context and opportunity window are declared.',
-  'The attempt is recorded live by challenger or recorder.',
+  'The attempt is recorded live by claimer or recorder.',
   'Reviewer can verify the exact wording from clip, transcript, or recorder note.',
 ];
 
@@ -263,7 +263,7 @@ function LandingPage() {
         <nav className="nav-links" aria-label="Primary navigation">
           <a href="#how-it-works">How it works</a>
           <a href="#examples">Examples</a>
-          <a href="#creators">Creators</a>
+          <a href="#creators">Claimers</a>
           <a href="#apply">Apply</a>
         </nav>
         <a className="nav-cta" href="/claims/new">
@@ -283,7 +283,7 @@ function LandingPage() {
                 muted
                 playsInline
                 preload="metadata"
-                aria-label="Cinematic video preview of a creator crossing the city by sunset with live chat directions"
+                aria-label="Cinematic video preview of a claimer crossing the city by sunset with live chat directions"
               />
               <div className="cinema-live-bar">
                 <span className="status live">Live soon</span>
@@ -294,7 +294,7 @@ function LandingPage() {
                 <p className="video-label">Featured claim video placeholder</p>
                 <h2>Across the city. Chat controls the route. Sunset deadline.</h2>
                 <p>
-                  Video description: cinematic opening on the creator at the
+                  Video description: cinematic opening on the claimer at the
                   starting point with the sun still high, live chat throwing
                   directions on screen, map route updating, timestamped
                   location check-ins, near-misses before sunset, pledge counter
@@ -330,8 +330,8 @@ function LandingPage() {
             <p className="eyebrow">Public claims. Real backing. Verified outcomes.</p>
             <h1>Say it. Stake it. Prove it.</h1>
             <p className="hero-lede">
-              {appConfig.name} turns bold creator claims into paid public events.
-              Supporters pledge to back the attempt. If the challenger proves
+              {appConfig.name} turns bold claimer claims into paid public events.
+              Supporters pledge to back the attempt. If the claimer proves
               it, they earn the pledge pool.
             </p>
             <div className="hero-actions">
@@ -381,7 +381,7 @@ function LandingPage() {
             <article className="step-card">
               <span className="step-number">01</span>
               <h3>Make the claim</h3>
-              <p>Creator posts a clear, time-bound claim with locked proof rules.</p>
+              <p>Claimer posts a clear, time-bound claim with locked proof rules.</p>
             </article>
             <article className="step-card">
               <span className="step-number">02</span>
@@ -396,7 +396,7 @@ function LandingPage() {
             <article className="step-card hot">
               <span className="step-number">04</span>
               <h3>Earn if verified</h3>
-              <p>The challenger earns the pledge pool when the claim is proved.</p>
+              <p>The claimer earns the pledge pool when the claim is proved.</p>
             </article>
           </div>
         </section>
@@ -451,7 +451,7 @@ function LandingPage() {
 
         <section id="creators" className="section-shell creator-section">
           <div className="creator-copy">
-            <p className="eyebrow">For creators</p>
+            <p className="eyebrow">For claimers</p>
             <h2>Turn one bold claim into a paid public event.</h2>
             <p>
               Your audience already watches you try things. {appConfig.name} gives them a
@@ -467,9 +467,9 @@ function LandingPage() {
           </div>
           <div className="creator-panel">
             <div className="payout-card">
-              <span className="status live">Creator upside</span>
+              <span className="status live">Claimer upside</span>
               <h3>$4,620 pledge pool</h3>
-              <p>If verified, payout goes to the challenger minus platform fee.</p>
+              <p>If verified, payout goes to the claimer minus platform fee.</p>
               <div className="payout-row">
                 <span>Backers</span>
                 <strong>296</strong>
@@ -529,7 +529,7 @@ function LandingPage() {
             </p>
             <form className="apply-form" action="/claims/new" method="get">
               <label>
-                Creator handle
+                Claimer handle
                 <input type="text" name="handle" placeholder="@yourhandle" />
               </label>
               <label>
@@ -626,39 +626,277 @@ function AppChrome({ children }: { children: ReactNode }) {
   );
 }
 
+type ClaimWizardValues = {
+  creatorName: string;
+  creatorHandle: string;
+  contactEmail: string;
+  password: string;
+  creatorPlatform: string;
+  title: string;
+  description: string;
+  proofRules: string;
+  liveSetup: string;
+  supporterInteraction: string;
+  stakeAmount: string;
+  pledgeThreshold: string;
+  liveStartsAt: string;
+  deadlineAt: string;
+};
+
+type ClaimWizardStep = {
+  key: keyof ClaimWizardValues;
+  label: string;
+  helper: string;
+  placeholder?: string;
+  inputType?: string;
+  fieldType?: 'input' | 'textarea' | 'select';
+  rows?: number;
+  required?: boolean;
+  options?: Array<[string, string]>;
+};
+
+const platformOptions: Array<[string, string]> = [
+  ['TikTok', 'TikTok'],
+  ['Instagram', 'Instagram'],
+  ['YouTube', 'YouTube'],
+  ['Twitch', 'Twitch'],
+  ['Kick', 'Kick'],
+  ['X', 'X'],
+  ['Discord', 'Discord'],
+  ['WhatsApp', 'WhatsApp'],
+  ['Other', 'Other'],
+];
+
+const claimWizardSteps: ClaimWizardStep[] = [
+  {
+    key: 'creatorName',
+    label: 'What is your name?',
+    helper: 'This creates the claimer profile people will see on the claim page.',
+    placeholder: 'Your name',
+    required: true,
+  },
+  {
+    key: 'creatorHandle',
+    label: 'What handle should supporters recognize?',
+    helper: 'Use your main public handle. You can change this later.',
+    placeholder: '@yourhandle',
+    required: true,
+  },
+  {
+    key: 'contactEmail',
+    label: 'What email should we use for your claimer account?',
+    helper: 'You will use this email to sign in and manage claims.',
+    placeholder: 'you@example.com',
+    inputType: 'email',
+    required: true,
+  },
+  {
+    key: 'password',
+    label: 'Create a password',
+    helper: 'Use at least 6 characters. If email confirmation is enabled, you may need to confirm before publishing.',
+    placeholder: 'Create password',
+    inputType: 'password',
+    required: true,
+  },
+  {
+    key: 'creatorPlatform',
+    label: 'Where is your main audience?',
+    helper: 'This helps supporters understand where they know you from.',
+    fieldType: 'select',
+    options: platformOptions,
+    required: true,
+  },
+  {
+    key: 'title',
+    label: 'What is the claim?',
+    helper: 'Make it specific and outcome-based: “I will do X by Y.”',
+    placeholder: 'I will do X by Y, live, with proof.',
+    required: true,
+  },
+  {
+    key: 'description',
+    label: 'Why should people care?',
+    helper: 'Explain the attempt, the tension, and what supporters are backing.',
+    placeholder: 'Explain what you will do, when it happens, why it is hard, and what supporters are backing.',
+    fieldType: 'textarea',
+    rows: 4,
+    required: true,
+  },
+  {
+    key: 'proofRules',
+    label: 'What proves the claim?',
+    helper: 'Add one proof rule per line. These become the locked proof checklist.',
+    placeholder:
+      'The attempt starts after the proof code is shown on stream.\nAt least one live camera records the attempt.\nThe outcome is visible or independently checkable before the deadline.',
+    fieldType: 'textarea',
+    rows: 6,
+    required: true,
+  },
+  {
+    key: 'liveSetup',
+    label: 'How will the live proof be recorded?',
+    helper: 'Describe phones, recorders, witnesses, screen share, or other proof sources.',
+    placeholder: 'Claimer phone, recorder phone, witness, screen share, public stream, location check-ins...',
+    fieldType: 'textarea',
+    rows: 4,
+    required: true,
+  },
+  {
+    key: 'supporterInteraction',
+    label: 'What can supporters do?',
+    helper: 'They may only watch, or they may chat, vote, choose directions, or submit prompts.',
+    placeholder: 'Supporters can chat and vote on the next direction during the live attempt.',
+    fieldType: 'textarea',
+    rows: 4,
+  },
+  {
+    key: 'stakeAmount',
+    label: 'How much are you staking?',
+    helper: 'Use a small number for now. Payment handling is still pledge-intent only.',
+    inputType: 'number',
+    required: true,
+  },
+  {
+    key: 'pledgeThreshold',
+    label: 'What pledge threshold unlocks the attempt?',
+    helper: 'Supporters pledge until this threshold is reached.',
+    inputType: 'number',
+    required: true,
+  },
+  {
+    key: 'liveStartsAt',
+    label: 'When does the live attempt start?',
+    helper: 'Pick the scheduled live start time.',
+    inputType: 'datetime-local',
+  },
+  {
+    key: 'deadlineAt',
+    label: 'What is the deadline?',
+    helper: 'This is the time by which the outcome must be proven.',
+    inputType: 'datetime-local',
+  },
+];
+
 function CreateClaimPage() {
+  const [values, setValues] = useState<ClaimWizardValues>({
+    creatorName: '',
+    creatorHandle: '',
+    contactEmail: '',
+    password: '',
+    creatorPlatform: '',
+    title: '',
+    description: '',
+    proofRules: '',
+    liveSetup: '',
+    supporterInteraction: '',
+    stakeAmount: '100',
+    pledgeThreshold: '500',
+    liveStartsAt: '',
+    deadlineAt: '',
+  });
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const currentStep = claimWizardSteps[currentStepIndex];
+  const isReviewStep = currentStepIndex === claimWizardSteps.length;
+  const progress = Math.round(((currentStepIndex + 1) / (claimWizardSteps.length + 1)) * 100);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function updateValue(key: keyof ClaimWizardValues, value: string) {
+    setValues((currentValues) => ({
+      ...currentValues,
+      [key]: value,
+    }));
+  }
+
+  function goNext() {
+    setMessage('');
+    if (!isReviewStep && currentStep.required && !values[currentStep.key].trim()) {
+      setStatus('error');
+      setMessage(`${currentStep.label} is required.`);
+      return;
+    }
+
+    setStatus('idle');
+    setCurrentStepIndex((stepIndex) => Math.min(stepIndex + 1, claimWizardSteps.length));
+  }
+
+  function goBack() {
+    setMessage('');
+    setStatus('idle');
+    setCurrentStepIndex((stepIndex) => Math.max(stepIndex - 1, 0));
+  }
+
+  async function handleCreateClaim() {
     setStatus('submitting');
     setMessage('');
 
-    const formData = new FormData(event.currentTarget);
-    const title = String(formData.get('title') || '').trim();
-    const creatorName = String(formData.get('creatorName') || '').trim();
+    const title = values.title.trim();
+    const creatorName = values.creatorName.trim();
     const slug = createSlug(title);
-    const proofRules = parseProofRules(formData.get('proofRules'));
-    const liveSetup = nullableString(formData.get('liveSetup'));
-    const supporterInteraction = nullableString(formData.get('supporterInteraction'));
+    const proofRules = parseProofRules(values.proofRules);
+    const liveSetup = nullableString(values.liveSetup);
+    const supporterInteraction = nullableString(values.supporterInteraction);
+    const { data: existingUser } = await supabase.auth.getUser();
+    let userId = existingUser.user?.id ?? null;
+
+    if (!userId) {
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: values.contactEmail.trim(),
+        password: values.password,
+        options: {
+          data: {
+            display_name: creatorName,
+            handle: values.creatorHandle.trim(),
+            role: 'claimer',
+          },
+        },
+      });
+
+      if (signUpError) {
+        setStatus('error');
+        setMessage(signUpError.message);
+        return;
+      }
+
+      if (!signUpData.session || !signUpData.user) {
+        setStatus('success');
+        setMessage('Account created. Confirm your email, then return to create your claim.');
+        return;
+      }
+
+      userId = signUpData.user.id;
+    }
+
+    const { error: profileError } = await supabase.from('profiles').upsert({
+      id: userId,
+      display_name: creatorName,
+      handle: nullableString(values.creatorHandle),
+      contact_email: nullableString(values.contactEmail),
+    });
+
+    if (profileError) {
+      setStatus('error');
+      setMessage(profileError.message);
+      return;
+    }
 
     const claimPayload = {
       slug,
+      creator_id: userId,
       creator_name: creatorName,
-      creator_handle: nullableString(formData.get('creatorHandle')),
-      creator_platform: nullableString(formData.get('creatorPlatform')),
-      contact_email: nullableString(formData.get('contactEmail')),
+      creator_handle: nullableString(values.creatorHandle),
+      creator_platform: nullableString(values.creatorPlatform),
+      contact_email: nullableString(values.contactEmail),
       claim_type: 'live_claim' as const,
       status: 'open_for_backing' as const,
       title,
-      description: nullableString(formData.get('description')),
+      description: nullableString(values.description),
       teaser_title: title,
       teaser_description: `Back ${creatorName}'s live claim and watch the proof.`,
-      stake_amount_cents: dollarsToCents(formData.get('stakeAmount')),
-      pledge_threshold_cents: dollarsToCents(formData.get('pledgeThreshold')),
-      live_starts_at: nullableDateTime(formData.get('liveStartsAt')),
-      deadline_at: nullableDateTime(formData.get('deadlineAt')),
+      stake_amount_cents: dollarsToCents(values.stakeAmount),
+      pledge_threshold_cents: dollarsToCents(values.pledgeThreshold),
+      live_starts_at: nullableDateTime(values.liveStartsAt),
+      deadline_at: nullableDateTime(values.deadlineAt),
       proof_summary: [
         proofRules.join('\n'),
         liveSetup ? `Live setup: ${liveSetup}` : '',
@@ -717,67 +955,120 @@ function CreateClaimPage() {
         <p className="eyebrow">Create claim</p>
         <h1 className="page-title">Launch a live proof claim.</h1>
         <p className="page-lede">
-          Create a shareable preview page, define the proof rules, invite supporters,
-          and decide how the attempt will be recorded live.
+          First create the claimer account, then define the public claim one decision at a time.
         </p>
 
-        <form className="mvp-form" onSubmit={handleSubmit}>
-          <FormField label="Claim title" name="title" required placeholder="I will do X by Y, live, with proof." />
-          <FormField label="Creator name" name="creatorName" required placeholder="Your name" />
-          <div className="form-grid">
-            <FormField label="Creator handle" name="creatorHandle" placeholder="@yourhandle" />
-            <FormSelect
-              label="Main platform"
-              name="creatorPlatform"
-              options={[
-                ['TikTok', 'TikTok'],
-                ['Instagram', 'Instagram'],
-                ['YouTube', 'YouTube'],
-                ['Twitch', 'Twitch'],
-                ['Kick', 'Kick'],
-                ['X', 'X'],
-                ['Discord', 'Discord'],
-                ['WhatsApp', 'WhatsApp'],
-                ['Other', 'Other'],
-              ]}
-            />
+        <section className="wizard-card">
+          <div className="wizard-progress" aria-label={`Claim setup ${progress}% complete`}>
+            <span style={{ width: `${progress}%` }} />
           </div>
-          <FormField label="Contact email" name="contactEmail" type="email" placeholder="you@example.com" />
-          <label>
-            Description
-            <textarea name="description" rows={4} placeholder="Explain what you will do, when it happens, why it is hard, and what supporters are backing." />
-          </label>
-          <label>
-            Proof checklist
-            <textarea
-              name="proofRules"
-              rows={5}
-              placeholder={'One rule per line. Example:\nThe attempt starts after the proof code is shown on stream.\nAt least one live camera records the attempt.\nThe outcome is visible or independently checkable before the deadline.'}
-            />
-          </label>
-          <label>
-            Live proof setup
-            <textarea name="liveSetup" rows={3} placeholder="Who records? Challenger phone, recorder phone, witness, screen share, public stream, location check-ins..." />
-          </label>
-          <label>
-            Supporter interaction
-            <textarea name="supporterInteraction" rows={3} placeholder="Can supporters chat, vote, choose directions, submit prompts, or only watch?" />
-          </label>
+          <p className="eyebrow">
+            Step {Math.min(currentStepIndex + 1, claimWizardSteps.length + 1)} of {claimWizardSteps.length + 1}
+          </p>
 
-          <div className="form-grid">
-            <FormField label="Stake amount ($)" name="stakeAmount" type="number" defaultValue="100" />
-            <FormField label="Pledge threshold ($)" name="pledgeThreshold" type="number" defaultValue="500" />
-            <FormField label="Live starts at" name="liveStartsAt" type="datetime-local" />
-            <FormField label="Deadline" name="deadlineAt" type="datetime-local" />
+          {isReviewStep ? (
+            <ClaimWizardReview values={values} />
+          ) : (
+            <WizardField step={currentStep} value={values[currentStep.key]} onChange={updateValue} />
+          )}
+
+          <div className="wizard-actions">
+            <button className="button button-ghost" type="button" onClick={goBack} disabled={currentStepIndex === 0 || status === 'submitting'}>
+              Back
+            </button>
+            {isReviewStep ? (
+              <button className="button button-primary" type="button" onClick={() => void handleCreateClaim()} disabled={status === 'submitting'}>
+                {status === 'submitting' ? 'Creating...' : 'Create account and claim'}
+              </button>
+            ) : (
+              <button className="button button-primary" type="button" onClick={goNext}>
+                Continue
+              </button>
+            )}
           </div>
-
-          <button className="button button-primary" type="submit" disabled={status === 'submitting'}>
-            {status === 'submitting' ? 'Creating...' : 'Create preview page'}
-          </button>
           {message ? <p className="form-message">{message}</p> : null}
-        </form>
+        </section>
       </main>
     </AppChrome>
+  );
+}
+
+function WizardField({
+  step,
+  value,
+  onChange,
+}: {
+  step: ClaimWizardStep;
+  value: string;
+  onChange: (key: keyof ClaimWizardValues, value: string) => void;
+}) {
+  return (
+    <label className="wizard-field">
+      <span>{step.label}</span>
+      <small>{step.helper}</small>
+      {step.fieldType === 'textarea' ? (
+        <textarea
+          value={value}
+          rows={step.rows ?? 4}
+          placeholder={step.placeholder}
+          onChange={(event) => onChange(step.key, event.target.value)}
+          autoFocus
+        />
+      ) : step.fieldType === 'select' ? (
+        <select value={value} onChange={(event) => onChange(step.key, event.target.value)} autoFocus>
+          <option value="" disabled>
+            Select one
+          </option>
+          {(step.options ?? []).map(([optionValue, label]) => (
+            <option value={optionValue} key={optionValue}>
+              {label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          value={value}
+          type={step.inputType ?? 'text'}
+          placeholder={step.placeholder}
+          onChange={(event) => onChange(step.key, event.target.value)}
+          autoFocus
+        />
+      )}
+    </label>
+  );
+}
+
+function ClaimWizardReview({ values }: { values: ClaimWizardValues }) {
+  const reviewItems: Array<[string, string]> = [
+    ['Claimer', `${values.creatorName} ${values.creatorHandle ? `(${values.creatorHandle})` : ''}`],
+    ['Email', values.contactEmail],
+    ['Platform', values.creatorPlatform],
+    ['Claim', values.title],
+    ['Proof', values.proofRules],
+    ['Live setup', values.liveSetup],
+    ['Supporter interaction', values.supporterInteraction || 'Supporters can watch and follow updates.'],
+    ['Stake', `$${values.stakeAmount || '0'}`],
+    ['Pledge threshold', `$${values.pledgeThreshold || '0'}`],
+    ['Live start', values.liveStartsAt || 'Not scheduled yet'],
+    ['Deadline', values.deadlineAt || 'Not set yet'],
+  ];
+
+  return (
+    <div className="wizard-review">
+      <h2>Review the claim setup.</h2>
+      <p>
+        This will create a claimer account, create the claim preview page, and open it
+        for supporters to pledge.
+      </p>
+      <div className="review-list">
+        {reviewItems.map(([label, value]) => (
+          <div key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -955,7 +1246,7 @@ function ClaimLivePage({ slug }: { slug: string }) {
       claim_id: data.claim.id,
       event_type: eventType,
       title,
-      source_role: 'challenger',
+      source_role: 'claimer',
       source_name: data.claim.creator_name,
     });
     setEventMessage(insertError ? insertError.message : `${title} logged.`);
@@ -1131,7 +1422,7 @@ function RecorderInvitePage({ token }: { token: string }) {
 
 function LiveKitJoinPanel({ claim }: { claim: Claim }) {
   const [displayName, setDisplayName] = useState('');
-  const [role, setRole] = useState<'challenger' | 'recorder' | 'witness' | 'supporter'>('supporter');
+  const [role, setRole] = useState<'claimer' | 'recorder' | 'witness' | 'supporter'>('supporter');
   const [connectionState, setConnectionState] = useState('Not connected');
 
   async function joinRoom(currentDisplayName: string) {
@@ -1172,8 +1463,8 @@ function LiveKitJoinPanel({ claim }: { claim: Claim }) {
         <p className="video-label">LiveKit room</p>
         <h3>{claim.title}</h3>
         <p>
-          Join as challenger, recorder, witness, or supporter. Camera publishing is enabled for
-          challenger/recorder/witness roles.
+          Join as claimer, recorder, witness, or supporter. Camera publishing is enabled for
+          claimer/recorder/witness roles.
         </p>
       </div>
       <div className="compact-form">
@@ -1191,7 +1482,7 @@ function LiveKitJoinPanel({ claim }: { claim: Claim }) {
           Role
           <select value={role} onChange={(event) => setRole(event.target.value as typeof role)}>
             <option value="supporter">Supporter</option>
-            <option value="challenger">Challenger</option>
+            <option value="claimer">Claimer</option>
             <option value="recorder">Recorder</option>
             <option value="witness">Witness</option>
           </select>
@@ -1410,7 +1701,7 @@ function parseProofRules(value: FormDataEntryValue | null) {
 
   return [
     'The claim rules are locked before pledges open.',
-    'The attempt is recorded live by the challenger, recorder, or witness.',
+    'The attempt is recorded live by the claimer, recorder, or witness.',
     'The final outcome is visible, timestamped, or independently checkable before the deadline.',
   ];
 }

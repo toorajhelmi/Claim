@@ -1262,7 +1262,8 @@ h3 {
 
 .mvp-form,
 .compact-form,
-.mvp-panel {
+.mvp-panel,
+.wizard-card {
   border: 1px solid var(--line);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.035)),
@@ -1279,6 +1280,119 @@ h3 {
   margin-top: 2rem;
   padding: 1.25rem;
   border-radius: 2rem;
+}
+
+.wizard-card {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 760px;
+  min-width: 0;
+  margin-top: 2rem;
+  padding: clamp(1rem, 4vw, 2rem);
+  overflow: clip;
+  border-radius: 2rem;
+}
+
+.wizard-progress {
+  height: 0.7rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.wizard-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green), var(--cyan), var(--pink));
+  transition: width 180ms ease;
+}
+
+.wizard-field {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.wizard-field > span {
+  display: block;
+  max-width: 680px;
+  font-size: clamp(2rem, 5vw, 4rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.wizard-field small {
+  max-width: 620px;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.wizard-field input,
+.wizard-field textarea,
+.wizard-field select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  color: #fff;
+  border: 1px solid var(--line);
+  border-radius: 1.2rem;
+  background: rgba(255, 255, 255, 0.07);
+  outline: none;
+}
+
+.wizard-field input,
+.wizard-field select {
+  min-height: 4rem;
+  padding: 0 1rem;
+  font-size: 1.12rem;
+}
+
+.wizard-field textarea {
+  padding: 1rem;
+  font-size: 1.02rem;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.wizard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.wizard-review h2 {
+  font-size: clamp(2rem, 5vw, 4rem);
+}
+
+.wizard-review > p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.review-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.review-list > div {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.9rem;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.review-list span {
+  color: var(--green);
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .compact-form {

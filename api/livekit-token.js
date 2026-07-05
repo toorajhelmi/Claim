@@ -22,7 +22,7 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  const canPublish = role === 'challenger' || role === 'recorder' || role === 'witness';
+  const canPublish = role === 'claimer' || role === 'recorder' || role === 'witness';
   const token = new AccessToken(apiKey, apiSecret, {
     identity: String(identity).slice(0, 120),
     name: String(displayName).slice(0, 120),
