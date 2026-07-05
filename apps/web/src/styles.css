@@ -24,13 +24,18 @@
 }
 
 html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
   scroll-behavior: smooth;
 }
 
 body {
+  width: 100%;
+  max-width: 100%;
   min-width: 320px;
   margin: 0;
-  overflow-x: hidden;
+  overflow-x: clip;
   color: #f8fbff;
   background:
     radial-gradient(circle at 20% 10%, rgba(112, 255, 139, 0.2), transparent 28rem),
@@ -46,8 +51,22 @@ a {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 .grain {
@@ -95,6 +114,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   max-width: 1180px;
+  width: 100%;
   margin: 0 auto;
   padding: 1rem 1.25rem;
   backdrop-filter: blur(16px);
@@ -160,6 +180,7 @@ textarea {
 .section-shell {
   width: min(1180px, calc(100% - 2rem));
   margin: 0 auto;
+  max-width: 100%;
 }
 
 .hero {
@@ -194,6 +215,7 @@ h2,
 h3,
 p {
   margin-top: 0;
+  overflow-wrap: anywhere;
 }
 
 h1 {
@@ -276,7 +298,9 @@ h3 {
 
 .cinema-stage {
   position: relative;
+  max-width: 100%;
   min-height: clamp(520px, 68vw, 760px);
+  overflow: clip;
 }
 
 .cinema-video {
@@ -396,7 +420,8 @@ h3 {
 .cinema-card {
   position: absolute;
   z-index: 4;
-  width: min(350px, 72vw);
+  width: min(350px, calc(100vw - 2rem));
+  max-width: calc(100% - 1.3rem);
   padding: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 1.35rem;
@@ -1250,6 +1275,7 @@ h3 {
   display: grid;
   gap: 1rem;
   max-width: 920px;
+  min-width: 0;
   margin-top: 2rem;
   padding: 1.25rem;
   border-radius: 2rem;
@@ -1260,6 +1286,7 @@ h3 {
   gap: 0.9rem;
   padding: 1rem;
   border-radius: 1.35rem;
+  min-width: 0;
 }
 
 .mvp-form label,
@@ -1281,6 +1308,8 @@ h3 {
 .compact-form select,
 .share-bar input {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   color: #fff;
   border: 1px solid var(--line);
   border-radius: 1rem;
@@ -1307,6 +1336,7 @@ h3 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
+  min-width: 0;
 }
 
 .type-toggle {
@@ -1369,6 +1399,7 @@ h3 {
   gap: 1rem;
   align-items: start;
   margin: 1rem 0;
+  min-width: 0;
 }
 
 .live-layout {
@@ -1378,6 +1409,8 @@ h3 {
 .mvp-panel {
   padding: 1.25rem;
   border-radius: 2rem;
+  min-width: 0;
+  overflow: clip;
 }
 
 .mvp-panel h2 {
@@ -1398,6 +1431,7 @@ h3 {
 
 .share-bar input {
   flex: 1 1 20rem;
+  min-width: 0;
 }
 
 .rule-list {
@@ -1491,6 +1525,7 @@ h3 {
   gap: 1rem;
   padding: 0.8rem;
   border-radius: 1rem;
+  min-width: 0;
 }
 
 .mini-list span {
@@ -1545,5 +1580,54 @@ h3 {
 
   .app-page {
     padding-top: 2.5rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .site-header {
+    gap: 0.5rem;
+    padding-inline: 0.5rem;
+  }
+
+  .brand {
+    min-width: 0;
+    gap: 0.45rem;
+    padding-left: 0.5rem;
+  }
+
+  .brand > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nav-cta,
+  .button {
+    white-space: normal;
+    text-align: center;
+  }
+
+  .page-title {
+    font-size: clamp(2.7rem, 15vw, 4.4rem);
+    line-height: 1;
+    letter-spacing: -0.025em;
+  }
+
+  .mvp-form,
+  .mvp-panel {
+    padding: 1rem;
+    border-radius: 1.45rem;
+  }
+
+  .share-bar {
+    display: grid;
+  }
+
+  .cinema-stage {
+    min-height: 620px;
+  }
+
+  .cinema-video {
+    min-height: 600px;
   }
 }

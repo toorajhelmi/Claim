@@ -105,7 +105,7 @@ const statusClassName: Record<ClaimExample['status'], string> = {
 
 const heroVideoSrc = '/videos/Cinematic_vertical_social_vide.mp4';
 
-type ClaimType = 'city_walk' | 'public_statement';
+type ClaimType = 'live_claim' | 'city_walk' | 'public_statement';
 type ClaimStatus =
   | 'draft'
   | 'preview'
@@ -627,7 +627,6 @@ function AppChrome({ children }: { children: ReactNode }) {
 }
 
 function CreateClaimPage() {
-  const [claimType, setClaimType] = useState<ClaimType>('city_walk');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
 
@@ -640,15 +639,17 @@ function CreateClaimPage() {
     const title = String(formData.get('title') || '').trim();
     const creatorName = String(formData.get('creatorName') || '').trim();
     const slug = createSlug(title);
+    const proofRules = parseProofRules(formData.get('proofRules'));
+    const liveSetup = nullableString(formData.get('liveSetup'));
+    const supporterInteraction = nullableString(formData.get('supporterInteraction'));
 
-    const proofRules = claimType === 'city_walk' ? defaultCityRules : defaultStatementRules;
     const claimPayload = {
       slug,
       creator_name: creatorName,
       creator_handle: nullableString(formData.get('creatorHandle')),
       creator_platform: nullableString(formData.get('creatorPlatform')),
       contact_email: nullableString(formData.get('contactEmail')),
-      claim_type: claimType,
+      claim_type: 'live_claim' as const,
       status: 'open_for_backing' as const,
       title,
       description: nullableString(formData.get('description')),
@@ -658,14 +659,19 @@ function CreateClaimPage() {
       pledge_threshold_cents: dollarsToCents(formData.get('pledgeThreshold')),
       live_starts_at: nullableDateTime(formData.get('liveStartsAt')),
       deadline_at: nullableDateTime(formData.get('deadlineAt')),
-      proof_summary: proofRules.join('\n'),
-      exact_statement: claimType === 'public_statement' ? nullableString(formData.get('exactStatement')) : null,
-      event_context: claimType === 'public_statement' ? nullableString(formData.get('eventContext')) : null,
-      start_area: claimType === 'city_walk' ? nullableString(formData.get('startArea')) : null,
-      destination_rule: claimType === 'city_walk' ? nullableString(formData.get('destinationRule')) : null,
-      allowed_transport: claimType === 'city_walk' ? nullableString(formData.get('allowedTransport')) : null,
-      checkin_interval_minutes:
-        claimType === 'city_walk' ? Number(formData.get('checkinIntervalMinutes') || 20) : null,
+      proof_summary: [
+        proofRules.join('\n'),
+        liveSetup ? `Live setup: ${liveSetup}` : '',
+        supporterInteraction ? `Supporter interaction: ${supporterInteraction}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+      exact_statement: null,
+      event_context: liveSetup,
+      start_area: null,
+      destination_rule: supporterInteraction,
+      allowed_transport: null,
+      checkin_interval_minutes: null,
     };
 
     const { data: claim, error: claimError } = await supabase
@@ -711,53 +717,52 @@ function CreateClaimPage() {
         <p className="eyebrow">Create claim</p>
         <h1 className="page-title">Launch a live proof claim.</h1>
         <p className="page-lede">
-          Start with one of the two MVP stress-test formats: live chat city walk or public
-          statement moment.
+          Create a shareable preview page, define the proof rules, invite supporters,
+          and decide how the attempt will be recorded live.
         </p>
 
         <form className="mvp-form" onSubmit={handleSubmit}>
-          <div className="type-toggle" role="group" aria-label="Claim type">
-            <button
-              className={claimType === 'city_walk' ? 'selected' : ''}
-              type="button"
-              onClick={() => setClaimType('city_walk')}
-            >
-              Live chat city walk
-            </button>
-            <button
-              className={claimType === 'public_statement' ? 'selected' : ''}
-              type="button"
-              onClick={() => setClaimType('public_statement')}
-            >
-              Public statement moment
-            </button>
-          </div>
-
-          <FormField label="Claim title" name="title" required placeholder={claimType === 'city_walk' ? 'I will cross the city by sunset using only live chat directions.' : 'I will ask this exact question during a public Q&A.'} />
+          <FormField label="Claim title" name="title" required placeholder="I will do X by Y, live, with proof." />
           <FormField label="Creator name" name="creatorName" required placeholder="Your name" />
           <div className="form-grid">
             <FormField label="Creator handle" name="creatorHandle" placeholder="@yourhandle" />
-            <FormField label="Platform" name="creatorPlatform" placeholder="TikTok, X, Twitch..." />
+            <FormSelect
+              label="Main platform"
+              name="creatorPlatform"
+              options={[
+                ['TikTok', 'TikTok'],
+                ['Instagram', 'Instagram'],
+                ['YouTube', 'YouTube'],
+                ['Twitch', 'Twitch'],
+                ['Kick', 'Kick'],
+                ['X', 'X'],
+                ['Discord', 'Discord'],
+                ['WhatsApp', 'WhatsApp'],
+                ['Other', 'Other'],
+              ]}
+            />
           </div>
           <FormField label="Contact email" name="contactEmail" type="email" placeholder="you@example.com" />
           <label>
             Description
-            <textarea name="description" rows={4} placeholder="Explain the attempt, what supporters can influence, and what proof will settle the result." />
+            <textarea name="description" rows={4} placeholder="Explain what you will do, when it happens, why it is hard, and what supporters are backing." />
           </label>
-
-          {claimType === 'city_walk' ? (
-            <div className="form-grid">
-              <FormField label="Start area" name="startArea" placeholder="Downtown station" />
-              <FormField label="Destination rule" name="destinationRule" placeholder="Supporters reveal the destination at start" />
-              <FormField label="Allowed transport" name="allowedTransport" placeholder="Walk, metro, bus; no rideshare" />
-              <FormField label="Check-in interval minutes" name="checkinIntervalMinutes" type="number" defaultValue="20" />
-            </div>
-          ) : (
-            <>
-              <FormField label="Exact statement/question" name="exactStatement" placeholder="The exact thing you will say or ask" />
-              <FormField label="Event context" name="eventContext" placeholder="Public Q&A, scheduled talk, public comment period..." />
-            </>
-          )}
+          <label>
+            Proof checklist
+            <textarea
+              name="proofRules"
+              rows={5}
+              placeholder={'One rule per line. Example:\nThe attempt starts after the proof code is shown on stream.\nAt least one live camera records the attempt.\nThe outcome is visible or independently checkable before the deadline.'}
+            />
+          </label>
+          <label>
+            Live proof setup
+            <textarea name="liveSetup" rows={3} placeholder="Who records? Challenger phone, recorder phone, witness, screen share, public stream, location check-ins..." />
+          </label>
+          <label>
+            Supporter interaction
+            <textarea name="supporterInteraction" rows={3} placeholder="Can supporters chat, vote, choose directions, submit prompts, or only watch?" />
+          </label>
 
           <div className="form-grid">
             <FormField label="Stake amount ($)" name="stakeAmount" type="number" defaultValue="100" />
@@ -795,6 +800,32 @@ function FormField({
     <label>
       {label}
       <input name={name} required={required} placeholder={placeholder} type={type} defaultValue={defaultValue} />
+    </label>
+  );
+}
+
+function FormSelect({
+  label,
+  name,
+  options,
+}: {
+  label: string;
+  name: string;
+  options: Array<[string, string]>;
+}) {
+  return (
+    <label>
+      {label}
+      <select name={name} defaultValue="">
+        <option value="" disabled>
+          Select platform
+        </option>
+        {options.map(([value, labelText]) => (
+          <option value={value} key={value}>
+            {labelText}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }
@@ -1224,7 +1255,7 @@ function useClaimBundle(slug: string) {
 function ClaimHeader({ claim }: { claim: Claim }) {
   return (
     <section className="claim-header">
-      <p className="eyebrow">{claim.claim_type === 'city_walk' ? 'Live chat city walk' : 'Public statement moment'}</p>
+      <p className="eyebrow">{formatClaimType(claim.claim_type)}</p>
       <h1 className="page-title">{claim.title}</h1>
       <div className="claim-meta">
         <span>{claim.status.replace(/_/g, ' ')}</span>
@@ -1365,6 +1396,35 @@ function createSlug(input: string) {
     .replace(/(^-|-$)/g, '')
     .slice(0, 58);
   return `${base || 'claim'}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function parseProofRules(value: FormDataEntryValue | null) {
+  const rules = String(value ?? '')
+    .split('\n')
+    .map((rule) => rule.trim())
+    .filter(Boolean);
+
+  if (rules.length > 0) {
+    return rules;
+  }
+
+  return [
+    'The claim rules are locked before pledges open.',
+    'The attempt is recorded live by the challenger, recorder, or witness.',
+    'The final outcome is visible, timestamped, or independently checkable before the deadline.',
+  ];
+}
+
+function formatClaimType(claimType: ClaimType) {
+  if (claimType === 'city_walk') {
+    return 'Live chat city walk';
+  }
+
+  if (claimType === 'public_statement') {
+    return 'Public statement moment';
+  }
+
+  return 'Live proof claim';
 }
 
 function nullableString(value: FormDataEntryValue | null) {
