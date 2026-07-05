@@ -241,6 +241,10 @@ export function App() {
     return <AuthPage nextPath={route.nextPath} />;
   }
 
+  if (route.name === 'auth-callback') {
+    return <AuthCallbackPage nextPath={route.nextPath} />;
+  }
+
   if (route.name === 'claim-detail') {
     return <ClaimDetailPage slug={route.slug} />;
   }
@@ -584,6 +588,7 @@ function VideoPlaceholderCard({ label, title, description }: VideoPlaceholder) {
 function getRoute(pathname: string):
   | { name: 'landing' }
   | { name: 'auth'; nextPath: string }
+  | { name: 'auth-callback'; nextPath: string }
   | { name: 'new-claim' }
   | { name: 'claim-detail'; slug: string }
   | { name: 'claim-live'; slug: string }
@@ -593,6 +598,10 @@ function getRoute(pathname: string):
 
   if (parts[0] === 'auth') {
     const params = new URLSearchParams(window.location.search);
+    if (parts[1] === 'callback') {
+      return { name: 'auth-callback', nextPath: params.get('next') || '/claims/new' };
+    }
+
     return { name: 'auth', nextPath: params.get('next') || '/claims/new' };
   }
 
@@ -657,6 +666,7 @@ function AuthPage({ nextPath }: { nextPath: string }) {
     primaryPlatform: '',
   });
   const safeNextPath = nextPath.startsWith('/') ? nextPath : '/claims/new';
+  const emailRedirectTo = getAuthRedirectUrl(safeNextPath);
   const canSubmit =
     values.email.trim().length > 0 &&
     values.password.trim().length >= 6 &&
@@ -699,7 +709,7 @@ function AuthPage({ nextPath }: { nextPath: string }) {
       email: values.email.trim(),
       password: values.password,
       options: {
-        emailRedirectTo: `${window.location.origin}${safeNextPath}`,
+        emailRedirectTo,
         data: {
           display_name: values.displayName.trim(),
           handle: values.handle.trim(),
@@ -750,7 +760,7 @@ function AuthPage({ nextPath }: { nextPath: string }) {
       type: 'signup',
       email: confirmationEmail,
       options: {
-        emailRedirectTo: `${window.location.origin}${safeNextPath}`,
+        emailRedirectTo,
       },
     });
 
@@ -836,6 +846,36 @@ function AuthPage({ nextPath }: { nextPath: string }) {
       </main>
     </AppChrome>
   );
+}
+
+function AuthCallbackPage({ nextPath }: { nextPath: string }) {
+  const [message, setMessage] = useState('Confirming your email...');
+  const safeNextPath = nextPath.startsWith('/') ? nextPath : '/claims/new';
+
+  useEffect(() => {
+    async function finishAuth() {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+
+      if (!data.session) {
+        setMessage('Email confirmed. Please sign in to continue.');
+        window.setTimeout(() => {
+          window.location.href = `/auth?next=${encodeURIComponent(safeNextPath)}`;
+        }, 1400);
+        return;
+      }
+
+      window.location.href = safeNextPath;
+    }
+
+    void finishAuth();
+  }, [safeNextPath]);
+
+  return <LoadingPage label={message} />;
 }
 
 type ClaimWizardValues = {
@@ -1863,6 +1903,13 @@ function createSlug(input: string) {
     .replace(/(^-|-$)/g, '')
     .slice(0, 58);
   return `${base || 'claim'}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function getAuthRedirectUrl(nextPath: string) {
+  const safeNextPath = nextPath.startsWith('/') ? nextPath : '/claims/new';
+  const configuredOrigin = appConfig.authRedirectOrigin?.replace(/\/$/, '');
+  const origin = configuredOrigin || window.location.origin;
+  return `${origin}/auth/callback?next=${encodeURIComponent(safeNextPath)}`;
 }
 
 function parseProofRules(value: FormDataEntryValue | null) {
