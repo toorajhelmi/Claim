@@ -71,3 +71,5 @@ npm install
 npm run dev
 npm run build
 ```
+
+For local web app config, copy `apps/web/.env.example` to `apps/web/.env.local` and fill the Vite environment variables.
