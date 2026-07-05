@@ -40,6 +40,7 @@ apps/
       styles.css
 docs/
   current-direction.md
+  mvp-live-proof-flows.md
   product-brief.md
   mvp-scope.md
   verification.md
@@ -59,7 +60,7 @@ The next product step is no-code or concierge validation:
 5. Manual evidence review and final result pages.
 6. No automated payouts until legal and payment-provider review is complete.
 
-Read `docs/current-direction.md` before making product or implementation decisions.
+Read `docs/current-direction.md` and `docs/mvp-live-proof-flows.md` before making product or implementation decisions.
 
 ## Local development
 

@@ -14,16 +14,23 @@ Avoid leading with narrow category language such as "AI builder app," "positive 
 
 ## First wedge
 
-The strongest initial wedge is creator-led public claims.
+The strongest initial wedge is live, audience-backed claims with visible tension and proof.
 
 These are claims that:
 
 - are easy to understand quickly;
 - have a visible attempt or journey;
-- are documentable or livestreamable;
+- are livestreamable;
 - have a clear proof condition;
 - can create audience suspense;
 - give the challenger a meaningful monetary incentive.
+
+The MVP should be stress-tested against two aggressive formats:
+
+1. **Live chat city walk** — the challenger crosses a city by a deadline using only live chat directions, with timestamped check-ins on stream.
+2. **Public confrontation / public statement moment** — the challenger asks or says a pre-declared thing during a public moment, with live recording and timestamped proof.
+
+These are technical stress tests for claim creation, social sharing, pledges, recorder/witness roles, live streams, supporter interaction, evidence, and verification. They do not mean every submitted claim in these categories should automatically be approved.
 
 ## Challenger incentive
 
@@ -55,7 +62,7 @@ Supporter rebate or financial upside is a separate high-risk model that requires
 
 ## Validation plan
 
-Do not build the full app first.
+Build toward a web MVP that proves the complete live-claim loop.
 
 Start with:
 
@@ -64,9 +71,12 @@ Start with:
 3. Creator application form.
 4. Supporter waitlist or pledge-interest form.
 5. Concierge claim pages.
-6. Manual pledge/precommit flow.
-7. Manual evidence review.
-8. Final proof/result page.
+6. Claim preview pages for sharing to social and direct connections.
+7. Manual pledge/precommit flow.
+8. Recorder/witness invitation flow.
+9. Live room prototype.
+10. Manual evidence review.
+11. Final proof/result page.
 
-Build the full app only after creators share claim pages and supporters show real pledge intent.
+The next product reference is `docs/mvp-live-proof-flows.md`.
 

@@ -2,7 +2,7 @@
 
 ## Primary ICP
 
-Focus on small-to-mid creators whose content already revolves around public attempts, challenges, experiments, skill development, or "prove it" moments.
+Focus on challengers whose audience already responds to live tension, public attempts, dares, missions, confrontation, or "prove it" moments.
 
 Best-fit challenger profile:
 
@@ -13,6 +13,7 @@ Best-fit challenger profile:
 - Wants a new monetizable content format beyond ads, sponsorships, and generic subscriptions.
 - Is comfortable making a time-bound public claim with a clear proof condition.
 - Is comfortable staking money, reputation, or a locked consequence to signal seriousness.
+- Has existing connections they can invite directly through social posts, group chats, DMs, Discord, WhatsApp, Telegram, X, Instagram, TikTok, Twitch, or YouTube.
 
 Avoid initially:
 
@@ -27,7 +28,7 @@ Start with direct, manual sourcing.
 
 - TikTok, YouTube Shorts, Instagram Reels, Twitch, Kick, X, and Discord.
 - Search phrases: `I bet I can`, `can I learn`, `in 24 hours`, `in 7 days`, `followers decide`, `challenge accepted`, `prove it`, `if this gets`, `I'll do it live`, `I tried for 30 days`, `road to`, `day 1 of`, `I challenged myself`, `bet you can't`.
-- Creator categories: skill challenges, creative challenges, cooking challenges, maker/build challenges, music/art challenges, magic/mentalism/proof claims, safe sport/performance challenges, charity challenges, live experiments, and audience-directed challenges.
+- Creator categories: live city missions, audience-directed missions, public statement moments, high-tension livestream events, street/interview creators, IRL streamers, challenge creators, live experiment creators, and creators whose audience already tells them what to do next.
 - Communities where creators already monetize through events, memberships, live streams, tips, or sponsorships.
 
 Manual sourcing target:
@@ -39,23 +40,23 @@ Manual sourcing target:
 
 ## Outreach
 
-The message should feel like an offer to turn an existing content pattern into a paid public event.
+The message should feel like an offer to turn an existing audience relationship into a paid live mission.
 
 Core creator pitch:
 
-> Claim lets creators make a bold public claim, put a stake behind it, and earn from supporters if they prove it. Your audience backs the attempt, follows the countdown, and gets access/perks/status. If you succeed, you earn the pledge pool. If you fail, your stake goes where you committed.
+> Claim lets you make a bold live claim, put a stake behind it, invite your audience to back it, and earn from supporters if you prove it. Your connections get a preview page, pledge CTA, live room, and final proof page. If you succeed, you earn the pledge pool. If you fail, the locked rules decide what happens.
 
 Short DM:
 
-> Your challenge content already gets people rooting for the outcome. Claim turns one challenge into a paid event: you make a public claim, supporters pledge to back/watch it, and if you prove it, you earn the pledge pool. We'll set up the first claim page free: countdown, supporter wall, proof checklist, and final result. Want to try one?
+> Your audience already reacts when there is a real "will they do it?" moment. Claim turns one live mission into a paid event: you post a claim preview, your connections pledge, they watch live, and if you prove it, you earn the pledge pool. Want us to set up one pilot claim page?
 
 More specific DM:
 
-> Your `[specific video/stream]` already feels like a Claim. You make a clear claim, your audience backs the attempt, and the final proof decides the outcome. We handle the page, pledge/precommit flow, supporter wall, proof rules, updates, and final result. You bring the audience and the attempt. If you prove it, you earn from the supporters who backed it.
+> Your `[specific video/stream]` already feels like a Claim. The next version could have a preview page, pledge threshold, supporter directions, recorders/witnesses, live room, and verified result. You bring the audience and the attempt. If you prove it, you earn from the supporters who backed it.
 
 Follow-up:
 
-> The key difference from a normal challenge post is receipts plus money: locked proof conditions, supporter pledge pool, stake, countdown, supporter wall, and a verified outcome. We're setting up the first few manually and free.
+> The key difference from a normal challenge post is receipts plus money: a claim preview people can share, pledge threshold, live proof rules, supporter input, recorder/witness evidence, and a verified outcome.
 
 ## Supporter acquisition
 
@@ -65,6 +66,7 @@ Supporter ICP:
 
 - Already follows the creator.
 - Wants to see the attempt happen.
+- Wants to influence the attempt through chat, votes, directions, or prompts.
 - Wants access, behind-the-scenes updates, status, or perks.
 - Likes being publicly credited as an early backer.
 - Is a supporter who may want to run their own claim later.
@@ -74,6 +76,8 @@ Supporter CTA examples:
 
 - "Back the claim for $10 and get your name on the supporter wall."
 - "Pledge $20 to follow the private updates and final proof."
+- "Back this mission and help decide the live route."
+- "Pledge before the threshold closes and get notified when the live room opens."
 - "Back the claim to unlock the final behind-the-scenes recap if it succeeds."
 - "If I fail, your pledge is refunded or donated based on the claim rules."
 

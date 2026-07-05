@@ -1,17 +1,17 @@
 # Claim Product Brief
 
-> Historical source brief. The current working direction has moved broader than the AI-builder-first wedge described below. For the latest positioning, first-wedge, and validation plan, see `docs/current-direction.md`.
+> Historical source brief. The current working direction has moved broader than the AI-builder-first wedge described below. For the latest positioning, first-wedge, and validation plan, see `docs/current-direction.md` and `docs/mvp-live-proof-flows.md`.
 
 ## Current Direction Summary
 
 Claim is now framed as a broad platform for making claims, backing them, and proving whether they happened.
 
-The first validation wedge should be creator-led public claims:
+The first validation wedge should be live, audience-backed proof claims:
 
 - challengers make a time-bound claim;
 - supporters pledge to back/watch the attempt;
 - the challenger earns the pledge pool if they prove the claim;
-- evidence and human review verify the outcome;
+- live streams, recorder/witness evidence, timestamped proof events, and human review verify the outcome;
 - supporters receive access, status, perks, updates, and proof rather than default financial upside.
 
 The AI-builder/Claim Ship concept below should be treated as one possible future category, not the primary launch wedge.
