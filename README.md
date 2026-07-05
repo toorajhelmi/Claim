@@ -73,3 +73,5 @@ npm run build
 ```
 
 For local web app config, copy `apps/web/.env.example` to `apps/web/.env.local` and fill the Vite environment variables.
+
+For local server/admin scripts, copy `.env.example` to `.env.local` and fill the server-only Supabase and LiveKit values. Never commit `.env.local`.
