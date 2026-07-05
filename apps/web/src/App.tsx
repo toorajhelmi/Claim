@@ -1219,7 +1219,7 @@ function ClaimHeader({ claim }: { claim: Claim }) {
       <p className="eyebrow">{claim.claim_type === 'city_walk' ? 'Live chat city walk' : 'Public statement moment'}</p>
       <h1 className="page-title">{claim.title}</h1>
       <div className="claim-meta">
-        <span>{claim.status.replaceAll('_', ' ')}</span>
+        <span>{claim.status.replace(/_/g, ' ')}</span>
         <span>{formatMoney(claim.pledge_pool_cents)} pledged</span>
         <span>{claim.supporter_count} supporters</span>
         <span>{claim.recorder_count} recorders</span>
