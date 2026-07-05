@@ -648,6 +648,7 @@ function AuthPage({ nextPath }: { nextPath: string }) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [confirmationEmail, setConfirmationEmail] = useState('');
   const [values, setValues] = useState({
     displayName: '',
     handle: '',
@@ -698,6 +699,7 @@ function AuthPage({ nextPath }: { nextPath: string }) {
       email: values.email.trim(),
       password: values.password,
       options: {
+        emailRedirectTo: `${window.location.origin}${safeNextPath}`,
         data: {
           display_name: values.displayName.trim(),
           handle: values.handle.trim(),
@@ -716,6 +718,7 @@ function AuthPage({ nextPath }: { nextPath: string }) {
     if (!data.session || !data.user) {
       setStatus('success');
       setMessage('Account created. Confirm your email, then sign in to run a claim.');
+      setConfirmationEmail(values.email.trim());
       setMode('signin');
       return;
     }
@@ -735,6 +738,30 @@ function AuthPage({ nextPath }: { nextPath: string }) {
     }
 
     window.location.href = safeNextPath;
+  }
+
+  async function handleResendConfirmation() {
+    if (!confirmationEmail) return;
+
+    setStatus('submitting');
+    setMessage('');
+
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: confirmationEmail,
+      options: {
+        emailRedirectTo: `${window.location.origin}${safeNextPath}`,
+      },
+    });
+
+    if (error) {
+      setStatus('error');
+      setMessage(error.message);
+      return;
+    }
+
+    setStatus('success');
+    setMessage('Confirmation email resent. Check inbox and spam/promotions.');
   }
 
   return (
@@ -795,6 +822,16 @@ function AuthPage({ nextPath }: { nextPath: string }) {
             </button>
           </form>
           {message ? <p className="form-message">{message}</p> : null}
+          {confirmationEmail ? (
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => void handleResendConfirmation()}
+              disabled={status === 'submitting'}
+            >
+              Resend confirmation email
+            </button>
+          ) : null}
         </section>
       </main>
     </AppChrome>
