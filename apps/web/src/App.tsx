@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { ReactNode } from 'react';
 import { Room, RoomEvent } from 'livekit-client';
+import { appConfig } from './lib/app-config';
 import { supabase } from './lib/supabase';
 
 type ClaimExample = {
@@ -217,6 +218,13 @@ const defaultStatementRules = [
 export function App() {
   const route = useMemo(() => getRoute(window.location.pathname), []);
 
+  useEffect(() => {
+    document.title = `${appConfig.name} - ${appConfig.tagline}`;
+    document
+      .querySelector('meta[name="description"]')
+      ?.setAttribute('content', appConfig.description);
+  }, []);
+
   if (route.name === 'new-claim') {
     return <CreateClaimPage />;
   }
@@ -248,9 +256,9 @@ function LandingPage() {
       <div className="grain" aria-hidden="true" />
 
       <header className="site-header">
-        <a className="brand" href="#" aria-label="Claim home">
-          <span className="brand-mark">C</span>
-          <span>Claim</span>
+        <a className="brand" href="#" aria-label={`${appConfig.name} home`}>
+          <span className="brand-mark">{appConfig.name.charAt(0)}</span>
+          <span>{appConfig.name}</span>
         </a>
         <nav className="nav-links" aria-label="Primary navigation">
           <a href="#how-it-works">How it works</a>
@@ -259,7 +267,7 @@ function LandingPage() {
           <a href="#apply">Apply</a>
         </nav>
         <a className="nav-cta" href="/claims/new">
-          Run a Claim
+          Run a claim
         </a>
       </header>
 
@@ -322,13 +330,13 @@ function LandingPage() {
             <p className="eyebrow">Public claims. Real backing. Verified outcomes.</p>
             <h1>Say it. Stake it. Prove it.</h1>
             <p className="hero-lede">
-              Claim turns bold creator claims into paid public events.
+              {appConfig.name} turns bold creator claims into paid public events.
               Supporters pledge to back the attempt. If the challenger proves
               it, they earn the pledge pool.
             </p>
             <div className="hero-actions">
               <a className="button button-primary" href="/claims/new">
-                Start a Claim
+                Start a claim
               </a>
               <a className="button button-ghost" href="#examples">
                 See live formats
@@ -446,7 +454,7 @@ function LandingPage() {
             <p className="eyebrow">For creators</p>
             <h2>Turn one bold claim into a paid public event.</h2>
             <p>
-              Your audience already watches you try things. Claim gives them a
+              Your audience already watches you try things. {appConfig.name} gives them a
               reason to back the attempt, follow the countdown, and show up for
               the proof.
             </p>
@@ -484,7 +492,7 @@ function LandingPage() {
               <p className="eyebrow">Proof layer</p>
               <h2>The result should feel undeniable.</h2>
               <p>
-                Every Claim page needs visible proof rules, timeline updates,
+                Every {appConfig.name} page needs visible proof rules, timeline updates,
                 and a final result that explains why the outcome was verified.
               </p>
             </div>
@@ -513,10 +521,10 @@ function LandingPage() {
         <section id="apply" className="section-shell apply-section">
           <div className="apply-card">
             <p className="eyebrow">Pilot applications</p>
-            <h2>Want to run one of the first Claims?</h2>
+            <h2>Want to run one of the first claims?</h2>
             <p>
               We are setting up the first claim pages manually. Bring the claim
-              and the audience. Claim handles the page, pledge/precommit flow,
+              and the audience. {appConfig.name} handles the page, pledge/precommit flow,
               proof checklist, supporter wall, and final result.
             </p>
             <form className="apply-form" action="/claims/new" method="get">
@@ -544,7 +552,7 @@ function LandingPage() {
       </main>
 
       <footer className="site-footer">
-        <span>Claim</span>
+        <span>{appConfig.name}</span>
         <p>Make a claim. Back the attempt. Verify the outcome.</p>
       </footer>
     </>
@@ -600,9 +608,9 @@ function AppChrome({ children }: { children: ReactNode }) {
       <div className="ambient ambient-two" />
       <div className="grain" aria-hidden="true" />
       <header className="site-header">
-        <a className="brand" href="/" aria-label="Claim home">
-          <span className="brand-mark">C</span>
-          <span>Claim</span>
+        <a className="brand" href="/" aria-label={`${appConfig.name} home`}>
+          <span className="brand-mark">{appConfig.name.charAt(0)}</span>
+          <span>{appConfig.name}</span>
         </a>
         <nav className="nav-links" aria-label="Primary navigation">
           <a href="/claims/new">Create</a>
@@ -610,7 +618,7 @@ function AppChrome({ children }: { children: ReactNode }) {
           <a href="/">Landing</a>
         </nav>
         <a className="nav-cta" href="/claims/new">
-          Run a Claim
+          Run a claim
         </a>
       </header>
       {children}
@@ -684,7 +692,7 @@ function CreateClaimPage() {
       claim_id: claim.id,
       share_title: title,
       share_description: claimPayload.teaser_description,
-      launch_copy: `I am making a Claim: ${title}. Back it and watch the proof.`,
+      launch_copy: `I am making a ${appConfig.name} claim: ${title}. Back it and watch the proof.`,
     });
 
     if (rulesError || shareError) {
@@ -1244,7 +1252,7 @@ function ProofRules({ rules }: { rules: ProofRule[] }) {
 
 function ShareBar({ claim }: { claim: Claim }) {
   const url = `${window.location.origin}/claims/${claim.slug}`;
-  const shareText = `I am making a Claim: ${claim.title}. Back it and watch the proof.`;
+  const shareText = `I am making a ${appConfig.name} claim: ${claim.title}. Back it and watch the proof.`;
   return (
     <div className="share-bar">
       <input readOnly value={url} aria-label="Claim share URL" />
