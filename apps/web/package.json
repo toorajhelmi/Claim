@@ -10,6 +10,8 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
+    "@supabase/supabase-js": "latest",
+    "livekit-client": "latest",
     "react": "latest",
     "react-dom": "latest"
   },
