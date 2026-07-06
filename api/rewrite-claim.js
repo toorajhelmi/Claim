@@ -1,8 +1,74 @@
+function normalizeFutureClaim(claim) {
+  const currentYear = new Date().getUTCFullYear();
+  const cleanedClaim = claim
+    .trim()
+    .replace(/[.。]+$/, '')
+    .replace(/,\s*(proving|proved)\s+I\s+can\b.*$/i, '')
+    .replace(/\s+by\s+[A-Z][a-z]+\s+\d{1,2},\s+(20\d{2})\b/gi, (match, year) =>
+      Number(year) < currentYear ? '' : match,
+    )
+    .replace(/\s+by\s+(20\d{2})\b/gi, (match, year) => (Number(year) < currentYear ? '' : match))
+    .trim();
+
+  if (/^i\s+will\b/i.test(cleanedClaim)) {
+    return cleanedClaim.replace(/^i\s+will\b/i, 'I will');
+  }
+
+  if (/^i['’]ll\b/i.test(cleanedClaim)) {
+    return cleanedClaim.replace(/^i['’]ll\b/i, 'I will');
+  }
+
+  if (/^i\s+am\s+going\s+to\b/i.test(cleanedClaim)) {
+    return cleanedClaim.replace(/^i\s+am\s+going\s+to\b/i, 'I will');
+  }
+
+  if (/^i\s+(can|could)\s+/i.test(cleanedClaim)) {
+    return `I will ${cleanedClaim.replace(/^i\s+(can|could)\s+/i, '')}`;
+  }
+
+  if (/^i\s+(successfully\s+)?completed\s+/i.test(cleanedClaim)) {
+    return `I will complete ${cleanedClaim.replace(/^i\s+(successfully\s+)?completed\s+/i, '')}`;
+  }
+
+  if (/^i\s+finished\s+/i.test(cleanedClaim)) {
+    return `I will finish ${cleanedClaim.replace(/^i\s+finished\s+/i, '')}`;
+  }
+
+  if (/^i\s+ran\s+/i.test(cleanedClaim)) {
+    return `I will run ${cleanedClaim.replace(/^i\s+ran\s+/i, '')}`;
+  }
+
+  if (/^i\s+walked\s+/i.test(cleanedClaim)) {
+    return `I will walk ${cleanedClaim.replace(/^i\s+walked\s+/i, '')}`;
+  }
+
+  if (/^i\s+built\s+/i.test(cleanedClaim)) {
+    return `I will build ${cleanedClaim.replace(/^i\s+built\s+/i, '')}`;
+  }
+
+  return `I will ${cleanedClaim.replace(/^i\s+/i, '')}`;
+}
+
+function isFutureClaim(claim) {
+  const normalized = claim.trim();
+  const currentYear = new Date().getUTCFullYear();
+  const yearMatches = normalized.match(/\b20\d{2}\b/g) || [];
+  const includesPastYear = yearMatches.some((year) => Number(year) < currentYear);
+
+  return (
+    /^I will\b/.test(normalized) &&
+    !includesPastYear &&
+    !/\bI\s+(successfully\s+)?(completed|did|finished|proved|ran|walked|built|published|delivered|showed|recorded|covered|crossed|reached)\b/i.test(normalized) &&
+    !/\bI\s+(have|had)\b/i.test(normalized) &&
+    !/\b(proving I can|proved I can|successfully completed)\b/i.test(normalized)
+  );
+}
+
 function fallbackRewrite(claim) {
-  const cleanedClaim = claim.trim().replace(/[.。]+$/, '');
+  const futureClaim = normalizeFutureClaim(claim);
 
   return {
-    rewrittenClaim: `${cleanedClaim} within the declared claim window, starting only after a live proof code is shown on stream, with timestamped video check-ins and an uncut finish clip that proves the outcome.`,
+    rewrittenClaim: `${futureClaim} within the declared claim window, starting only after a live proof code is shown on stream, with timestamped video check-ins and an uncut finish clip that proves the outcome.`,
     explanation:
       'Added live-start proof, timestamped evidence, and a clear claim-window constraint.',
     source: 'rubric',
@@ -30,7 +96,7 @@ async function rewriteWithOpenAi(claim, fallback) {
           {
             role: 'system',
             content:
-              'Rewrite Claimroom claim titles. Return strict JSON with rewrittenClaim and explanation. Preserve the claimer intent, but make the claim specific, exciting, durable, provable, and constrained to the claim window. Include live proof, proof code or stream-start constraint, timestamped evidence, objective outcome, and deadline/window language. Keep it as one first-person claim sentence. Do not add unsafe or illegal behavior.',
+              'Rewrite Claimroom claim titles. Return strict JSON with rewrittenClaim and explanation. Preserve the claimer intent, but make the claim specific, exciting, durable, provable, and constrained to the claim window. The rewrittenClaim must be a future-tense commitment that starts exactly with "I will". Never write as if the claimer already completed it. Never use phrases like "I successfully completed", "I proved", "I have", "I ran", or "proving I can". Do not invent calendar dates; if no date is provided, say "by the declared deadline" or "within the declared claim window". Include live proof, proof code or stream-start constraint, timestamped evidence, objective outcome, and deadline/window language. Keep it as one first-person claim sentence. Do not add unsafe or illegal behavior.',
           },
           {
             role: 'user',
@@ -49,7 +115,7 @@ async function rewriteWithOpenAi(claim, fallback) {
     const parsed = JSON.parse(content);
     const rewrittenClaim = String(parsed.rewrittenClaim || '').trim();
 
-    if (!rewrittenClaim) {
+    if (!rewrittenClaim || !isFutureClaim(rewrittenClaim)) {
       return fallback;
     }
 
