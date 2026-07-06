@@ -160,22 +160,29 @@ function strengthenLiveSetupRewrite(content) {
   nextLines = appendLineIfMissing(
     nextLines,
     nextText,
-    ['phone', 'camera', 'gopro', 'go pro', 'screen', 'stream', 'live source'],
-    'A phone, camera, screen share, or live stream source will record the attempt.',
+    ['phone', 'camera', 'gopro', 'go pro', 'bodycam', 'dashcam', 'drone', 'screen', 'stream', 'live source', 'gps', 'tracker', 'sensor', 'transcript', 'public feed', 'venue feed'],
+    'A live recording source, screen share, device tracker, sensor, transcript, or public proof feed will capture the attempt.',
   );
   nextText = nextLines.join('\n');
   nextLines = appendLineIfMissing(
     nextLines,
     nextText,
-    ['proof code', 'stream start', 'on camera'],
-    'At stream start, the proof code will be shown on camera.',
+    ['proof code', 'stream start', 'live start', 'start code', 'timestamped start'],
+    'At live start, a proof code or timestamped start marker will be captured by the proof source.',
   );
   nextText = nextLines.join('\n');
   nextLines = appendLineIfMissing(
     nextLines,
     nextText,
-    ['head view', 'body view', 'full body', 'route', 'location', 'gps', 'angle', 'view', 'screen share'],
-    'The camera view must clearly show the relevant action, route, location, or outcome for AI-assisted verification.',
+    ['head view', 'body view', 'full body', 'route', 'location', 'gps', 'angle', 'view', 'screen share', 'sensor', 'tracker', 'feed', 'metadata', 'transcript', 'outcome'],
+    'The proof source must clearly show, record, or preserve the relevant action, route, location, screen, sensor feed, transcript, metadata, or outcome for AI-assisted verification.',
+  );
+  nextText = nextLines.join('\n');
+  nextLines = appendLineIfMissing(
+    nextLines,
+    nextText,
+    ['friend', 'partner', 'teammate', 'assistant', 'helper', 'collaborator', 'co-streamer', 'co streamer', 'recorder', 'witness', 'moderator', 'reviewer', 'judge', 'public', 'bystander', 'venue', 'third-party', 'third party', 'independent', 'external', 'second', 'another', 'separate', 'second device', 'second source'],
+    'An independent person, second device, public feed, venue source, third-party artifact, or external reviewer-verifiable source must support the proof.',
   );
   nextText = nextLines.join('\n');
   nextLines = appendLineIfMissing(

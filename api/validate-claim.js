@@ -269,11 +269,121 @@ function runProofRulesRubric(content) {
 function runLiveSetupRubric(content) {
   const normalized = content.trim();
   const lower = normalized.toLowerCase();
-  const hasCaptureDevice = hasAny(lower, ['phone', 'camera', 'gopro', 'go pro', 'screen', 'stream', 'live', 'mic', 'audio']);
-  const hasCoverage = hasAny(lower, ['head view', 'body view', 'full body', 'route', 'location', 'gps', 'angle', 'view', 'screen share']);
-  const hasSecondSource = hasAny(lower, ['friend', 'partner', 'recorder', 'witness', 'second', 'another', 'support', 'camera two', '2 cameras']);
-  const hasRecordingPlan = hasAny(lower, ['record', 'recording', 'saved', 'clip', 'upload', 'link', 'archive', 'stream', 'metadata', 'transcript']);
-  const hasContinuity = hasAny(lower, ['throughout', 'continuous', 'check-in', 'check in', 'timestamp', 'proof code', 'start', 'finish', 'uncut']);
+  const hasCaptureDevice = hasAny(lower, [
+    'phone',
+    'camera',
+    'gopro',
+    'go pro',
+    'bodycam',
+    'dashcam',
+    'drone',
+    'webcam',
+    'screen',
+    'screen share',
+    'stream',
+    'live',
+    'mic',
+    'audio',
+    'gps',
+    'tracker',
+    'wearable',
+    'sensor',
+    'device',
+    'app',
+    'metadata',
+    'transcript',
+    'public feed',
+    'venue feed',
+  ]);
+  const hasCoverage = hasAny(lower, [
+    'head view',
+    'body view',
+    'full body',
+    'route',
+    'location',
+    'gps',
+    'angle',
+    'view',
+    'screen share',
+    'screen view',
+    'sensor',
+    'tracker',
+    'feed',
+    'metadata',
+    'transcript',
+    'map',
+    'clock',
+    'start',
+    'finish',
+    'outcome',
+    'public post',
+    'receipt',
+  ]);
+  const hasSecondSource = hasAny(lower, [
+    'friend',
+    'partner',
+    'teammate',
+    'assistant',
+    'helper',
+    'collaborator',
+    'co-streamer',
+    'co streamer',
+    'recorder',
+    'witness',
+    'moderator',
+    'reviewer',
+    'judge',
+    'public',
+    'bystander',
+    'venue',
+    'third-party',
+    'third party',
+    'independent',
+    'external',
+    'second',
+    'another',
+    'separate',
+    'support',
+    'camera two',
+    '2 cameras',
+    'second device',
+    'second source',
+  ]);
+  const hasRecordingPlan = hasAny(lower, [
+    'record',
+    'recording',
+    'saved',
+    'clip',
+    'upload',
+    'link',
+    'archive',
+    'stream',
+    'metadata',
+    'transcript',
+    'log',
+    'export',
+    'evidence',
+    'receipt',
+    'screenshot',
+    'artifact',
+  ]);
+  const hasContinuity = hasAny(lower, [
+    'throughout',
+    'continuous',
+    'check-in',
+    'check in',
+    'timestamp',
+    'proof code',
+    'start',
+    'finish',
+    'uncut',
+    'before',
+    'after',
+    'from beginning',
+    'entire',
+    'live-start',
+    'claim window',
+  ]);
 
   const criteria = [
     scoreCriterion(
@@ -283,25 +393,25 @@ function runLiveSetupRubric(content) {
       hasCaptureDevice
         ? 'The setup names at least one live capture source.'
         : 'The setup does not yet say what device or source records the attempt.',
-      'Name the phone, camera, GoPro, screen share, mic, or stream source.',
+      'Name the recording source, live feed, screen share, GPS/device tracker, sensor, transcript, or public proof feed.',
     ),
     scoreCriterion(
       'Useful coverage',
       hasCoverage,
       hasCoverage ? 20 : 8,
       hasCoverage
-        ? 'The setup explains what the camera or proof source will cover.'
+        ? 'The setup explains what the proof source will capture or preserve.'
         : 'The setup does not yet explain what reviewers will actually see.',
-      'Describe the angle, route/location coverage, screen view, body view, or GPS source.',
+      'Describe the angle, route/location coverage, screen view, sensor feed, transcript, metadata, or outcome artifact.',
     ),
     scoreCriterion(
       'Independent support',
       hasSecondSource,
       hasSecondSource ? 18 : 8,
       hasSecondSource
-        ? 'There is a second person or source to make the proof stronger.'
+        ? 'There is another person, source, or independent artifact to make the proof stronger.'
         : 'The setup would be stronger with another source besides the claimer.',
-      'Add a recorder, witness, friend phone, second camera, or independent live source.',
+      'Add a recorder, witness, second device, public feed, venue source, third-party artifact, or independent verification source.',
     ),
     scoreCriterion(
       'Saved evidence',
@@ -323,7 +433,7 @@ function runLiveSetupRubric(content) {
     ),
   ];
 
-  return buildReviewFromCriteria(criteria, 'The live proof setup is strong enough for a Claimroom claim.', 'The live proof setup needs clearer devices, coverage, saved evidence, or continuity.');
+  return buildReviewFromCriteria(criteria, 'The live proof setup is strong enough for a Claimroom claim.', 'The live proof setup needs clearer capture sources, coverage, saved evidence, or continuity.');
 }
 
 function buildReviewFromCriteria(criteria, passSummary, failSummary) {
