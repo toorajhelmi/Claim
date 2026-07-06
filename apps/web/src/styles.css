@@ -1511,6 +1511,108 @@ h3 {
   min-height: 3.25rem;
 }
 
+.claimability-panel {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.claimability-panel.muted p,
+.claimability-panel > p,
+.claimability-panel small {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.claimability-panel.passed {
+  background: rgba(112, 255, 139, 0.09);
+  box-shadow: inset 0 0 0 1px rgba(112, 255, 139, 0.24);
+}
+
+.claimability-panel.failed {
+  background: rgba(255, 179, 71, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 179, 71, 0.24);
+}
+
+.claimability-head {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.claimability-head .eyebrow {
+  margin-bottom: 0.45rem;
+}
+
+.claimability-head strong {
+  display: block;
+  font-size: 1.35rem;
+}
+
+.claimability-head > span {
+  flex: 0 0 auto;
+  padding: 0.5rem 0.7rem;
+  color: #041006;
+  font-weight: 900;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--green), var(--cyan));
+}
+
+.claimability-checks {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.claimability-checks > div {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border-radius: 0.9rem;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.claimability-checks span {
+  justify-self: start;
+  padding: 0.22rem 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+
+.claimability-checks .passed span {
+  color: #041006;
+  background: var(--green);
+}
+
+.claimability-checks .failed span {
+  color: #130c02;
+  background: var(--orange);
+}
+
+.claimability-checks p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.claimability-suggestions {
+  color: rgba(248, 251, 255, 0.88);
+}
+
+.claimability-suggestions ul {
+  padding-left: 1.1rem;
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .text-button {
   justify-self: start;
   padding: 0;

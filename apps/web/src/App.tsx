@@ -209,6 +209,23 @@ type ClaimBundle = {
   checkins: Checkin[];
 };
 
+type ClaimabilityCriterion = {
+  name: string;
+  passed: boolean;
+  reason: string;
+  suggestion: string;
+};
+
+type ClaimabilityReview = {
+  claimable: boolean;
+  score: number;
+  verdict: string;
+  summary: string;
+  criteria: ClaimabilityCriterion[];
+  suggestions: string[];
+  source: 'ai' | 'rubric';
+};
+
 const defaultCityRules = [
   'Live stream starts at the declared start point.',
   'Route decisions must come from live supporter chat or votes.',
@@ -966,7 +983,6 @@ const claimWizardSteps: ClaimWizardStep[] = [
     key: 'title',
     label: 'What is the claim?',
     helper: 'Make it specific and outcome-based: “I will do X by Y.”',
-    placeholder: 'I will do X by Y, live, with proof.',
     required: true,
   },
   {
@@ -1050,10 +1066,16 @@ function CreateClaimPage() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [claimabilityReview, setClaimabilityReview] = useState<ClaimabilityReview | null>(null);
+  const [claimabilityStatus, setClaimabilityStatus] = useState<'idle' | 'checking' | 'passed' | 'failed' | 'error'>('idle');
+  const [lastReviewedClaim, setLastReviewedClaim] = useState('');
   const currentStep = claimWizardSteps[currentStepIndex];
   const isReviewStep = currentStepIndex === claimWizardSteps.length;
   const progress = Math.round(((currentStepIndex + 1) / (claimWizardSteps.length + 1)) * 100);
-  const canContinue = isReviewStep || !currentStep.required || values[currentStep.key].trim().length > 0;
+  const currentValue = isReviewStep ? '' : values[currentStep.key].trim();
+  const canContinue =
+    (isReviewStep || !currentStep.required || currentValue.length > 0) &&
+    claimabilityStatus !== 'checking';
 
   useEffect(() => {
     async function loadClaimer() {
@@ -1103,14 +1125,68 @@ function CreateClaimPage() {
       ...currentValues,
       [key]: value,
     }));
+
+    if (key === 'title') {
+      setClaimabilityReview(null);
+      setClaimabilityStatus('idle');
+      setLastReviewedClaim('');
+      setMessage('');
+    }
   }
 
-  function goNext() {
+  async function validateClaimTitle() {
+    const claim = values.title.trim();
+
+    setClaimabilityStatus('checking');
+    setMessage('');
+
+    const response = await fetch('/api/validate-claim', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ claim }),
+    });
+
+    if (!response.ok) {
+      const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
+      setClaimabilityStatus('error');
+      setMessage(errorBody?.error ?? 'Could not review the claim. Try again.');
+      return false;
+    }
+
+    const review = (await response.json()) as ClaimabilityReview;
+    setClaimabilityReview(review);
+    setLastReviewedClaim(claim);
+
+    if (!review.claimable) {
+      setClaimabilityStatus('failed');
+      setMessage('Tighten the claim before continuing.');
+      return false;
+    }
+
+    setClaimabilityStatus('passed');
+    return true;
+  }
+
+  async function goNext() {
     setMessage('');
     if (!isReviewStep && currentStep.required && !values[currentStep.key].trim()) {
       setStatus('error');
       setMessage(`${currentStep.label} is required.`);
       return;
+    }
+
+    if (
+      !isReviewStep &&
+      currentStep.key === 'title' &&
+      (lastReviewedClaim !== values.title.trim() || claimabilityStatus !== 'passed')
+    ) {
+      const isClaimable = await validateClaimTitle();
+
+      if (!isClaimable) {
+        return;
+      }
     }
 
     setStatus('idle');
@@ -1233,7 +1309,12 @@ function CreateClaimPage() {
           {isReviewStep ? (
             <ClaimWizardReview values={values} />
           ) : (
-            <WizardField step={currentStep} value={values[currentStep.key]} onChange={updateValue} />
+            <>
+              <WizardField step={currentStep} value={values[currentStep.key]} onChange={updateValue} />
+              {currentStep.key === 'title' ? (
+                <ClaimabilityPanel review={claimabilityReview} status={claimabilityStatus} />
+              ) : null}
+            </>
           )}
 
           <div className="wizard-actions">
@@ -1247,8 +1328,12 @@ function CreateClaimPage() {
                 {status === 'submitting' ? 'Creating...' : 'Create claim'}
               </button>
             ) : (
-              <button className="button button-primary" type="button" onClick={goNext} disabled={!canContinue}>
-                Continue
+              <button className="button button-primary" type="button" onClick={() => void goNext()} disabled={!canContinue}>
+                {claimabilityStatus === 'checking'
+                  ? 'Reviewing...'
+                  : currentStep.key === 'title'
+                    ? 'Review claim'
+                    : 'Continue'}
               </button>
             )}
           </div>
@@ -1301,6 +1386,71 @@ function WizardField({
         />
       )}
     </label>
+  );
+}
+
+function ClaimabilityPanel({
+  review,
+  status,
+}: {
+  review: ClaimabilityReview | null;
+  status: 'idle' | 'checking' | 'passed' | 'failed' | 'error';
+}) {
+  if (status === 'idle') {
+    return (
+      <div className="claimability-panel muted">
+        <p>
+          Claimroom will review this for excitement, durability, proof, and whether it
+          can be tied to the claim window.
+        </p>
+      </div>
+    );
+  }
+
+  if (status === 'checking') {
+    return (
+      <div className="claimability-panel">
+        <p className="eyebrow">AI claimability review</p>
+        <strong>Checking whether this can become a claim...</strong>
+      </div>
+    );
+  }
+
+  if (!review) {
+    return null;
+  }
+
+  return (
+    <div className={`claimability-panel ${review.claimable ? 'passed' : 'failed'}`}>
+      <div className="claimability-head">
+        <div>
+          <p className="eyebrow">AI claimability review</p>
+          <strong>{review.verdict}</strong>
+        </div>
+        <span>{review.score}/100</span>
+      </div>
+      <p>{review.summary}</p>
+      <div className="claimability-checks">
+        {review.criteria.map((criterion) => (
+          <div className={criterion.passed ? 'passed' : 'failed'} key={criterion.name}>
+            <span>{criterion.passed ? 'Pass' : 'Fix'}</span>
+            <strong>{criterion.name}</strong>
+            <p>{criterion.reason}</p>
+          </div>
+        ))}
+      </div>
+      {!review.claimable && review.suggestions.length > 0 ? (
+        <div className="claimability-suggestions">
+          <strong>Make it claimable:</strong>
+          <ul>
+            {review.suggestions.map((suggestion) => (
+              <li key={suggestion}>{suggestion}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <small>Review source: {review.source === 'ai' ? 'AI model' : 'Claimroom rubric fallback'}</small>
+    </div>
   );
 }
 
