@@ -1,3 +1,5 @@
+const rewriteSections = new Set(['title', 'proofRules', 'liveSetup']);
+
 function normalizeFutureClaim(claim) {
   const currentYear = new Date().getUTCFullYear();
   const cleanedClaim = claim
@@ -101,7 +103,37 @@ function hasUnsupportedAddedFacts(original, rewritten) {
   );
 }
 
-function fallbackRewrite(claim) {
+function cleanInput(content) {
+  return content.trim().replace(/[.。]+$/, '');
+}
+
+function fallbackRewrite(claim, section) {
+  if (section === 'proofRules') {
+    const cleanedClaim = cleanInput(claim);
+
+    return {
+      rewrittenClaim: `${cleanedClaim}
+The attempt starts only after a live proof code is shown on stream.
+Timestamped evidence must show the start, key progress points, and final outcome.
+Saved video, GPS, witness, public artifact, or recorded evidence must remain available for review.`,
+      explanation:
+        'Added claim-window integrity, timestamped progress evidence, and saved reviewable proof.',
+      source: 'rubric',
+    };
+  }
+
+  if (section === 'liveSetup') {
+    const cleanedClaim = cleanInput(claim);
+
+    return {
+      rewrittenClaim: `${cleanedClaim}
+Live proof will start with a proof code on camera, continue with timestamped updates during the attempt, and keep saved recordings or evidence links for review after the event.`,
+      explanation:
+        'Added stream-start proof, continuity, and saved evidence for review.',
+      source: 'rubric',
+    };
+  }
+
   const futureClaim = normalizeFutureClaim(claim);
 
   return {
@@ -112,7 +144,19 @@ function fallbackRewrite(claim) {
   };
 }
 
-async function rewriteWithOpenAi(claim, fallback) {
+function getRewriteSystemPrompt(section) {
+  if (section === 'proofRules') {
+    return 'Rewrite Claimroom proof rules. Return strict JSON with rewrittenClaim and explanation. Preserve the user intent and all user-provided facts. Accuracy is mandatory: do not invent or guess facts, dates, distances, time targets, named places, exact addresses, route names, or measurements unless they appear in the original text. Make the proof rules specific, durable, reviewable, and constrained to the claim window. Prefer one rule per line. Add live proof code, stream-start requirement, timestamped evidence, saved recording/artifact, witness/recorder, GPS or independently checkable evidence only when stated by the user or as a generic proof source without guessing measurements. Do not add unsafe or illegal behavior.';
+  }
+
+  if (section === 'liveSetup') {
+    return 'Rewrite Claimroom live proof setup. Return strict JSON with rewrittenClaim and explanation. Preserve the user intent and all user-provided facts. Accuracy is mandatory: do not invent or guess facts, dates, distances, time targets, named places, exact addresses, route names, or measurements unless they appear in the original text. Make the setup clear about capture devices or sources, coverage, continuity from start to finish, saved recordings/evidence links, and any witness or recorder support. Keep it concise and practical. Do not add unsafe or illegal behavior.';
+  }
+
+  return 'Rewrite Claimroom claim titles. Return strict JSON with rewrittenClaim and explanation. Preserve the claimer intent, but make the claim specific, exciting, durable, provable, and constrained to the claim window. Accuracy is mandatory: do not invent or guess facts. Do not add calendar dates, distances, pace targets, time targets, named places, exact addresses, route names, or measurements unless they appear in the original claim. If a measurement is unknown, say it must be proven by live, GPS, timestamped, witness, or recorded evidence instead of guessing a number. The rewrittenClaim must be a future-tense commitment that starts exactly with "I will". Never write as if the claimer already completed it. Never use phrases like "I successfully completed", "I proved", "I have", "I ran", or "proving I can". If no deadline is provided, say "by the declared deadline" or "within the declared claim window". Include live proof, proof code or stream-start constraint, timestamped evidence, objective outcome, and deadline/window language. Keep it as one first-person claim sentence. Do not add unsafe or illegal behavior.';
+}
+
+async function rewriteWithOpenAi(claim, fallback, section) {
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
@@ -132,12 +176,11 @@ async function rewriteWithOpenAi(claim, fallback) {
         messages: [
           {
             role: 'system',
-            content:
-              'Rewrite Claimroom claim titles. Return strict JSON with rewrittenClaim and explanation. Preserve the claimer intent, but make the claim specific, exciting, durable, provable, and constrained to the claim window. Accuracy is mandatory: do not invent or guess facts. Do not add calendar dates, distances, pace targets, time targets, named places, exact addresses, route names, or measurements unless they appear in the original claim. If a measurement is unknown, say it must be proven by live, GPS, timestamped, witness, or recorded evidence instead of guessing a number. The rewrittenClaim must be a future-tense commitment that starts exactly with "I will". Never write as if the claimer already completed it. Never use phrases like "I successfully completed", "I proved", "I have", "I ran", or "proving I can". If no deadline is provided, say "by the declared deadline" or "within the declared claim window". Include live proof, proof code or stream-start constraint, timestamped evidence, objective outcome, and deadline/window language. Keep it as one first-person claim sentence. Do not add unsafe or illegal behavior.',
+            content: getRewriteSystemPrompt(section),
           },
           {
             role: 'user',
-            content: `Original claim: ${claim}`,
+            content: `Original text: ${claim}`,
           },
         ],
       }),
@@ -152,7 +195,11 @@ async function rewriteWithOpenAi(claim, fallback) {
     const parsed = JSON.parse(content);
     const rewrittenClaim = String(parsed.rewrittenClaim || '').trim();
 
-    if (!rewrittenClaim || !isFutureClaim(rewrittenClaim) || hasUnsupportedAddedFacts(claim, rewrittenClaim)) {
+    if (
+      !rewrittenClaim ||
+      (section === 'title' && !isFutureClaim(rewrittenClaim)) ||
+      hasUnsupportedAddedFacts(claim, rewrittenClaim)
+    ) {
       return fallback;
     }
 
@@ -174,14 +221,15 @@ module.exports = async function handler(request, response) {
   }
 
   const claim = String(request.body?.claim ?? '').trim();
+  const section = rewriteSections.has(request.body?.section) ? request.body.section : 'title';
 
   if (!claim) {
     response.status(400).json({ error: 'claim is required' });
     return;
   }
 
-  const fallback = fallbackRewrite(claim);
-  const rewrite = await rewriteWithOpenAi(claim, fallback);
+  const fallback = fallbackRewrite(claim, section);
+  const rewrite = await rewriteWithOpenAi(claim, fallback, section);
 
   response.status(200).json(rewrite);
 };

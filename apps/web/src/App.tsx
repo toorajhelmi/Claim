@@ -232,6 +232,56 @@ type ClaimRewrite = {
   source: 'openai' | 'rubric';
 };
 
+type ReviewStatus = 'idle' | 'checking' | 'passed' | 'failed' | 'error';
+type RewriteStatus = 'idle' | 'rewriting' | 'error';
+type ReviewableStepKey = 'title' | 'proofRules' | 'liveSetup';
+
+type SectionReviewState = {
+  review: ClaimabilityReview | null;
+  status: ReviewStatus;
+  lastReviewed: string;
+  rewriteStatus: RewriteStatus;
+  lastRewrite: string;
+};
+
+const reviewableStepLabels: Record<ReviewableStepKey, string> = {
+  title: 'Claim',
+  proofRules: 'Proof rules',
+  liveSetup: 'Live setup',
+};
+
+const reviewableStepKeys: ReviewableStepKey[] = ['title', 'proofRules', 'liveSetup'];
+
+function isReviewableStepKey(key: keyof ClaimWizardValues): key is ReviewableStepKey {
+  return reviewableStepKeys.includes(key as ReviewableStepKey);
+}
+
+function createInitialSectionReviewState(): Record<ReviewableStepKey, SectionReviewState> {
+  return {
+    title: {
+      review: null,
+      status: 'idle',
+      lastReviewed: '',
+      rewriteStatus: 'idle',
+      lastRewrite: '',
+    },
+    proofRules: {
+      review: null,
+      status: 'idle',
+      lastReviewed: '',
+      rewriteStatus: 'idle',
+      lastRewrite: '',
+    },
+    liveSetup: {
+      review: null,
+      status: 'idle',
+      lastReviewed: '',
+      rewriteStatus: 'idle',
+      lastRewrite: '',
+    },
+  };
+}
+
 const defaultCityRules = [
   'Live stream starts at the declared start point.',
   'Route decisions must come from live supporter chat or votes.',
@@ -1074,18 +1124,17 @@ function CreateClaimPage() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
-  const [claimabilityReview, setClaimabilityReview] = useState<ClaimabilityReview | null>(null);
-  const [claimabilityStatus, setClaimabilityStatus] = useState<'idle' | 'checking' | 'passed' | 'failed' | 'error'>('idle');
-  const [lastReviewedClaim, setLastReviewedClaim] = useState('');
-  const [rewriteStatus, setRewriteStatus] = useState<'idle' | 'rewriting' | 'error'>('idle');
-  const [lastRewrite, setLastRewrite] = useState('');
+  const [sectionReviews, setSectionReviews] = useState(createInitialSectionReviewState);
   const currentStep = claimWizardSteps[currentStepIndex];
   const isReviewStep = currentStepIndex === claimWizardSteps.length;
   const progress = Math.round(((currentStepIndex + 1) / (claimWizardSteps.length + 1)) * 100);
   const currentValue = isReviewStep ? '' : values[currentStep.key].trim();
+  const currentReviewKey = !isReviewStep && isReviewableStepKey(currentStep.key) ? currentStep.key : null;
+  const currentReviewState = currentReviewKey ? sectionReviews[currentReviewKey] : null;
   const canContinue =
     (isReviewStep || !currentStep.required || currentValue.length > 0) &&
-    claimabilityStatus !== 'checking';
+    currentReviewState?.status !== 'checking' &&
+    currentReviewState?.rewriteStatus !== 'rewriting';
 
   useEffect(() => {
     async function loadClaimer() {
@@ -1136,75 +1185,84 @@ function CreateClaimPage() {
       [key]: value,
     }));
 
-    if (key === 'title') {
-      setClaimabilityReview(null);
-      setClaimabilityStatus('idle');
-      setLastReviewedClaim('');
-      setLastRewrite('');
+    if (isReviewableStepKey(key)) {
+      resetSectionReview(key);
       setMessage('');
     }
   }
 
-  async function validateClaimTitle() {
-    const claim = values.title.trim();
-
-    setClaimabilityStatus('checking');
-    setMessage('');
-
-    const response = await fetch('/api/validate-claim', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+  function updateSectionReview(section: ReviewableStepKey, nextState: Partial<SectionReviewState>) {
+    setSectionReviews((currentReviews) => ({
+      ...currentReviews,
+      [section]: {
+        ...currentReviews[section],
+        ...nextState,
       },
-      body: JSON.stringify({ claim }),
-    });
-
-    if (!response.ok) {
-      const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
-      setClaimabilityStatus('error');
-      setMessage(errorBody?.error ?? 'Could not review the claim. Try again.');
-      return false;
-    }
-
-    const review = (await response.json()) as ClaimabilityReview;
-    setClaimabilityReview(review);
-    setLastReviewedClaim(claim);
-
-    if (!review.claimable) {
-      setClaimabilityStatus('failed');
-      setMessage('Tighten the claim before continuing.');
-      return false;
-    }
-
-    setClaimabilityStatus('passed');
-    return true;
+    }));
   }
 
-  async function reviewClaimValue(claim: string) {
+  function resetSectionReview(section: ReviewableStepKey) {
+    updateSectionReview(section, {
+      review: null,
+      status: 'idle',
+      lastReviewed: '',
+      rewriteStatus: 'idle',
+      lastRewrite: '',
+    });
+  }
+
+  async function reviewSectionValue(section: ReviewableStepKey, claim: string) {
     const response = await fetch('/api/validate-claim', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ claim }),
+      body: JSON.stringify({ claim, section }),
     });
 
     if (!response.ok) {
       const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
-      throw new Error(errorBody?.error ?? 'Could not review the claim. Try again.');
+      throw new Error(errorBody?.error ?? `Could not review ${reviewableStepLabels[section].toLowerCase()}. Try again.`);
     }
 
     return (await response.json()) as ClaimabilityReview;
   }
 
-  async function handleRewriteClaim() {
-    const claim = values.title.trim();
+  async function validateReviewSection(section: ReviewableStepKey) {
+    const claim = values[section].trim();
+
+    updateSectionReview(section, { status: 'checking' });
+    setMessage('');
+
+    try {
+      const review = await reviewSectionValue(section, claim);
+      updateSectionReview(section, {
+        review,
+        lastReviewed: claim,
+        status: review.claimable ? 'passed' : 'failed',
+      });
+
+      if (!review.claimable) {
+        setMessage(`${reviewableStepLabels[section]} needs tightening before continuing.`);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      updateSectionReview(section, { status: 'error' });
+      setMessage(error instanceof Error ? error.message : `Could not review ${reviewableStepLabels[section].toLowerCase()}.`);
+      return false;
+    }
+  }
+
+  async function handleRewriteSection(section: ReviewableStepKey) {
+    const claim = values[section].trim();
 
     if (!claim) {
       return;
     }
 
-    setRewriteStatus('rewriting');
+    updateSectionReview(section, { rewriteStatus: 'rewriting' });
     setMessage('');
 
     let response: Response;
@@ -1215,18 +1273,18 @@ function CreateClaimPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ claim }),
+        body: JSON.stringify({ claim, section }),
       });
     } catch {
-      setRewriteStatus('error');
-      setMessage('Could not rewrite the claim. Try again.');
+      updateSectionReview(section, { rewriteStatus: 'error' });
+      setMessage(`Could not rewrite ${reviewableStepLabels[section].toLowerCase()}. Try again.`);
       return;
     }
 
     if (!response.ok) {
       const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
-      setRewriteStatus('error');
-      setMessage(errorBody?.error ?? 'Could not rewrite the claim. Try again.');
+      updateSectionReview(section, { rewriteStatus: 'error' });
+      setMessage(errorBody?.error ?? `Could not rewrite ${reviewableStepLabels[section].toLowerCase()}. Try again.`);
       return;
     }
 
@@ -1234,34 +1292,38 @@ function CreateClaimPage() {
     const rewrittenClaim = rewrite.rewrittenClaim.trim();
 
     if (!rewrittenClaim) {
-      setRewriteStatus('error');
-      setMessage('Could not rewrite the claim. Try adding more detail first.');
+      updateSectionReview(section, { rewriteStatus: 'error' });
+      setMessage(`Could not rewrite ${reviewableStepLabels[section].toLowerCase()}. Try adding more detail first.`);
       return;
     }
 
     setValues((currentValues) => ({
       ...currentValues,
-      title: rewrittenClaim,
+      [section]: rewrittenClaim,
     }));
-    setLastRewrite(rewrittenClaim);
+    updateSectionReview(section, { lastRewrite: rewrittenClaim });
 
     try {
-      const review = await reviewClaimValue(rewrittenClaim);
-      setClaimabilityReview(review);
-      setLastReviewedClaim(rewrittenClaim);
-      setClaimabilityStatus(review.claimable ? 'passed' : 'failed');
-      setRewriteStatus('idle');
+      const review = await reviewSectionValue(section, rewrittenClaim);
+      updateSectionReview(section, {
+        review,
+        lastReviewed: rewrittenClaim,
+        status: review.claimable ? 'passed' : 'failed',
+        rewriteStatus: 'idle',
+      });
       setMessage(
         review.claimable
-          ? 'Rewritten into a claimable version. You can continue or edit it.'
-          : 'Rewritten, but it still needs tightening.',
+          ? `${reviewableStepLabels[section]} rewritten and accepted. You can continue or edit it.`
+          : `${reviewableStepLabels[section]} rewritten, but it still needs tightening.`,
       );
     } catch (error) {
-      setClaimabilityReview(null);
-      setClaimabilityStatus('idle');
-      setLastReviewedClaim('');
-      setRewriteStatus('error');
-      setMessage(error instanceof Error ? error.message : 'Could not review rewritten claim.');
+      updateSectionReview(section, {
+        review: null,
+        status: 'idle',
+        lastReviewed: '',
+        rewriteStatus: 'error',
+      });
+      setMessage(error instanceof Error ? error.message : `Could not review rewritten ${reviewableStepLabels[section].toLowerCase()}.`);
     }
   }
 
@@ -1273,12 +1335,18 @@ function CreateClaimPage() {
       return;
     }
 
-    if (
-      !isReviewStep &&
-      currentStep.key === 'title' &&
-      (lastReviewedClaim !== values.title.trim() || claimabilityStatus !== 'passed')
-    ) {
-      const isClaimable = await validateClaimTitle();
+    if (!isReviewStep && isReviewableStepKey(currentStep.key)) {
+      const reviewState = sectionReviews[currentStep.key];
+      const currentSectionValue = values[currentStep.key].trim();
+      const needsReview = reviewState.lastReviewed !== currentSectionValue || reviewState.status !== 'passed';
+
+      if (!needsReview) {
+        setStatus('idle');
+        setCurrentStepIndex((stepIndex) => Math.min(stepIndex + 1, claimWizardSteps.length));
+        return;
+      }
+
+      const isClaimable = await validateReviewSection(currentStep.key);
 
       if (!isClaimable) {
         return;
@@ -1407,18 +1475,19 @@ function CreateClaimPage() {
           ) : (
             <>
               <WizardField step={currentStep} value={values[currentStep.key]} onChange={updateValue} />
-              {currentStep.key === 'title' && lastRewrite ? (
+              {currentReviewKey && currentReviewState?.lastRewrite ? (
                 <div className="rewrite-applied">
-                  <span>Applied rewritten claim</span>
-                  <p>{lastRewrite}</p>
+                  <span>Applied rewritten {reviewableStepLabels[currentReviewKey].toLowerCase()}</span>
+                  <p>{currentReviewState.lastRewrite}</p>
                 </div>
               ) : null}
-              {currentStep.key === 'title' ? (
+              {currentReviewKey && currentReviewState ? (
                 <ClaimabilityPanel
-                  review={claimabilityReview}
-                  status={claimabilityStatus}
-                  rewriteStatus={rewriteStatus}
-                  onRewrite={() => void handleRewriteClaim()}
+                  label={reviewableStepLabels[currentReviewKey]}
+                  review={currentReviewState.review}
+                  status={currentReviewState.status}
+                  rewriteStatus={currentReviewState.rewriteStatus}
+                  onRewrite={() => void handleRewriteSection(currentReviewKey)}
                 />
               ) : null}
             </>
@@ -1436,10 +1505,10 @@ function CreateClaimPage() {
               </button>
             ) : (
               <button className="button button-primary" type="button" onClick={() => void goNext()} disabled={!canContinue}>
-                {claimabilityStatus === 'checking'
+                {currentReviewState?.status === 'checking'
                   ? 'Reviewing...'
-                  : currentStep.key === 'title' && claimabilityStatus !== 'passed'
-                    ? 'Review claim'
+                  : currentReviewKey && currentReviewState?.status !== 'passed'
+                    ? `Review ${reviewableStepLabels[currentReviewKey].toLowerCase()}`
                     : 'Continue'}
               </button>
             )}
@@ -1497,22 +1566,24 @@ function WizardField({
 }
 
 function ClaimabilityPanel({
+  label,
   review,
   status,
   rewriteStatus,
   onRewrite,
 }: {
+  label: string;
   review: ClaimabilityReview | null;
-  status: 'idle' | 'checking' | 'passed' | 'failed' | 'error';
-  rewriteStatus: 'idle' | 'rewriting' | 'error';
+  status: ReviewStatus;
+  rewriteStatus: RewriteStatus;
   onRewrite: () => void;
 }) {
   if (status === 'idle') {
     return (
       <div className="claimability-panel muted">
         <p>
-          Claimroom will review this for excitement, durability, proof, and whether it
-          can be tied to the claim window.
+          Claimroom will review this {label.toLowerCase()} for durability, proof quality,
+          and whether it can be tied to the claim window.
         </p>
       </div>
     );
@@ -1521,8 +1592,8 @@ function ClaimabilityPanel({
   if (status === 'checking') {
     return (
       <div className="claimability-panel">
-        <p className="eyebrow">AI claimability review</p>
-        <strong>Checking whether this can become a claim...</strong>
+        <p className="eyebrow">AI {label.toLowerCase()} review</p>
+        <strong>Checking whether this is strong enough...</strong>
       </div>
     );
   }
@@ -1535,7 +1606,7 @@ function ClaimabilityPanel({
     <div className={`claimability-panel ${review.claimable ? 'passed' : 'failed'}`}>
       <div className="claimability-head">
         <div>
-          <p className="eyebrow">AI claimability review</p>
+          <p className="eyebrow">AI {label.toLowerCase()} review</p>
           <strong>{review.verdict}</strong>
         </div>
         <span>{review.score}/100</span>
@@ -1549,7 +1620,7 @@ function ClaimabilityPanel({
             onClick={onRewrite}
             disabled={rewriteStatus === 'rewriting'}
           >
-            {rewriteStatus === 'rewriting' ? 'Rewriting...' : 'Rewrite to make claimable'}
+            {rewriteStatus === 'rewriting' ? 'Rewriting...' : `Rewrite ${label.toLowerCase()}`}
           </button>
         </div>
       ) : null}
@@ -2209,9 +2280,11 @@ function createSlug(input: string) {
   const base = input
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '')
-    .slice(0, 58);
-  return `${base || 'claim'}-${Math.random().toString(36).slice(2, 7)}`;
+    .replace(/(^-|-$)/g, '');
+  const prefix = base.slice(0, 48).replace(/(^-|-$)/g, '') || 'claim';
+  const suffix = Math.random().toString(36).slice(2, 8);
+
+  return `${prefix}-${suffix}`;
 }
 
 function getAuthRedirectUrl(nextPath: string) {

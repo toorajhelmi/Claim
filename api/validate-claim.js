@@ -1,4 +1,5 @@
 const MIN_SCORE = 72;
+const reviewSections = new Set(['title', 'proofRules', 'liveSetup']);
 
 const stopWords = new Set([
   'a',
@@ -204,12 +205,161 @@ function runRubric(claim) {
   };
 }
 
-async function runAiReview(claim, fallback) {
+function runProofRulesRubric(content) {
+  const normalized = content.trim();
+  const lower = normalized.toLowerCase();
+  const lines = normalized.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const hasMultipleRules = lines.length >= 2 || normalized.length >= 140;
+  const hasLiveStart = hasAny(lower, ['live', 'stream', 'proof code', 'start', 'before', 'window']);
+  const hasDurableEvidence = hasAny(lower, ['record', 'recording', 'video', 'clip', 'gps', 'timestamp', 'saved', 'link', 'photo']);
+  const hasObjectiveOutcome = hasAny(lower, ['gps', 'location', 'distance', 'finish', 'reach', 'timestamp', 'measured', 'visible', 'check']);
+  const hasIndependentReview = hasAny(lower, ['witness', 'recorder', 'friend', 'review', 'verify', 'independently', 'public']);
+
+  const criteria = [
+    scoreCriterion(
+      'Specific proof checklist',
+      hasMultipleRules,
+      hasMultipleRules ? 20 : 8,
+      hasMultipleRules
+        ? 'The proof rules give reviewers more than one concrete thing to check.'
+        : 'The proof rules are still too thin.',
+      'List the exact evidence items reviewers will check, one rule per line.',
+    ),
+    scoreCriterion(
+      'Claim-window proof',
+      hasLiveStart,
+      hasLiveStart ? 20 : 7,
+      hasLiveStart
+        ? 'The rules explain how the attempt is tied to the live claim window.'
+        : 'The rules do not yet prove the attempt starts inside the claim window.',
+      'Add a live proof code, stream-start requirement, timestamped start, or locked attempt window.',
+    ),
+    scoreCriterion(
+      'Durable evidence',
+      hasDurableEvidence,
+      hasDurableEvidence ? 20 : 7,
+      hasDurableEvidence
+        ? 'The proof can leave saved evidence after the live attempt.'
+        : 'The rules do not clearly say what saved evidence remains after the event.',
+      'Mention recorded video, GPS page, timestamped clips, saved stream, photo evidence, or evidence links.',
+    ),
+    scoreCriterion(
+      'Objective outcome',
+      hasObjectiveOutcome,
+      hasObjectiveOutcome ? 22 : 8,
+      hasObjectiveOutcome
+        ? 'The outcome should be objectively checkable from the evidence.'
+        : 'The rules do not yet make the outcome objectively checkable.',
+      'Say what must be measured, seen, reached, recorded, or independently checked.',
+    ),
+    scoreCriterion(
+      'Review confidence',
+      hasIndependentReview,
+      hasIndependentReview ? 18 : 8,
+      hasIndependentReview
+        ? 'There is a path for another person or public artifact to support review.'
+        : 'A reviewer may still have to trust only the claimer.',
+      'Add a witness, recorder, public artifact, independent check, or reviewer-verifiable source.',
+    ),
+  ];
+
+  return buildReviewFromCriteria(criteria, 'Proof rules are strong enough for a Claimroom claim.', 'The proof rules need clearer evidence, reviewability, or claim-window integrity.');
+}
+
+function runLiveSetupRubric(content) {
+  const normalized = content.trim();
+  const lower = normalized.toLowerCase();
+  const hasCaptureDevice = hasAny(lower, ['phone', 'camera', 'gopro', 'go pro', 'screen', 'stream', 'live', 'mic', 'audio']);
+  const hasCoverage = hasAny(lower, ['head view', 'body view', 'full body', 'route', 'location', 'gps', 'angle', 'view', 'screen share']);
+  const hasSecondSource = hasAny(lower, ['friend', 'recorder', 'witness', 'second', 'another', 'support', 'camera two', '2 cameras']);
+  const hasRecordingPlan = hasAny(lower, ['record', 'recording', 'saved', 'clip', 'upload', 'link', 'archive', 'stream']);
+  const hasContinuity = hasAny(lower, ['throughout', 'continuous', 'check-in', 'check in', 'timestamp', 'proof code', 'start', 'finish', 'uncut']);
+
+  const criteria = [
+    scoreCriterion(
+      'Capture source',
+      hasCaptureDevice,
+      hasCaptureDevice ? 20 : 7,
+      hasCaptureDevice
+        ? 'The setup names at least one live capture source.'
+        : 'The setup does not yet say what device or source records the attempt.',
+      'Name the phone, camera, GoPro, screen share, mic, or stream source.',
+    ),
+    scoreCriterion(
+      'Useful coverage',
+      hasCoverage,
+      hasCoverage ? 20 : 8,
+      hasCoverage
+        ? 'The setup explains what the camera or proof source will cover.'
+        : 'The setup does not yet explain what reviewers will actually see.',
+      'Describe the angle, route/location coverage, screen view, body view, or GPS source.',
+    ),
+    scoreCriterion(
+      'Independent support',
+      hasSecondSource,
+      hasSecondSource ? 18 : 8,
+      hasSecondSource
+        ? 'There is a second person or source to make the proof stronger.'
+        : 'The setup would be stronger with another source besides the claimer.',
+      'Add a recorder, witness, friend phone, second camera, or independent live source.',
+    ),
+    scoreCriterion(
+      'Saved evidence',
+      hasRecordingPlan,
+      hasRecordingPlan ? 20 : 7,
+      hasRecordingPlan
+        ? 'The setup can leave saved evidence after the live event.'
+        : 'The setup does not yet say what recording remains after the live event.',
+      'Mention saved recording, clip, stream archive, upload, or evidence link.',
+    ),
+    scoreCriterion(
+      'Continuity',
+      hasContinuity,
+      hasContinuity ? 22 : 8,
+      hasContinuity
+        ? 'The setup helps reviewers follow the attempt from start to finish.'
+        : 'The setup does not yet explain continuity from start to finish.',
+      'Add a proof code at start, timestamped check-ins, continuous recording, finish clip, or uncut attempt segment.',
+    ),
+  ];
+
+  return buildReviewFromCriteria(criteria, 'The live proof setup is strong enough for a Claimroom claim.', 'The live proof setup needs clearer devices, coverage, saved evidence, or continuity.');
+}
+
+function buildReviewFromCriteria(criteria, passSummary, failSummary) {
+  const score = criteria.reduce((total, criterion) => total + criterion.points, 0);
+  const claimable = score >= MIN_SCORE && criteria.every((criterion) => criterion.passed || criterion.points >= 18);
+  const failed = criteria.filter((criterion) => !criterion.passed);
+
+  return {
+    claimable,
+    score,
+    verdict: claimable ? 'Looks strong' : 'Needs tightening',
+    summary: claimable ? passSummary : failSummary,
+    criteria,
+    suggestions: failed.map((criterion) => criterion.suggestion),
+    source: 'rubric',
+  };
+}
+
+function runRubricForSection(content, section) {
+  if (section === 'proofRules') {
+    return runProofRulesRubric(content);
+  }
+
+  if (section === 'liveSetup') {
+    return runLiveSetupRubric(content);
+  }
+
+  return runRubric(content);
+}
+
+async function runAiReview(claim, fallback, section) {
   const openAiKey = process.env.OPENAI_API_KEY;
   const gatewayKey = process.env.AI_GATEWAY_API_KEY;
 
   if (openAiKey) {
-    const review = await runOpenAiReview(claim, fallback, openAiKey);
+    const review = await runOpenAiReview(claim, fallback, openAiKey, section);
 
     if (review.source === 'openai') {
       return review;
@@ -217,7 +367,7 @@ async function runAiReview(claim, fallback) {
   }
 
   if (gatewayKey) {
-    const review = await runGatewayReview(claim, fallback, gatewayKey);
+    const review = await runGatewayReview(claim, fallback, gatewayKey, section);
 
     if (review.source === 'ai-gateway') {
       return review;
@@ -257,21 +407,27 @@ function normalizeAiReview(parsed, fallback, source) {
   return normalized;
 }
 
-function getValidatorMessages(claim) {
+function getValidatorMessages(claim, section) {
+  const sectionLabel = {
+    title: 'claim title',
+    proofRules: 'proof rules',
+    liveSetup: 'live proof setup',
+  }[section];
+
   return [
     {
       role: 'system',
       content:
-        'You review Claimroom claims. Return strict JSON with claimable boolean, score 0-100, verdict, summary, criteria array, suggestions array. Each criteria item must have name, passed, reason, suggestion. A claim is claimable only if it is exciting, durable, provable, and either novel or provably constrained to the claim window. Reject generic claims and claims that could have been secretly completed before the claim began unless the wording includes live-from-start proof, randomized reveal, proof code, uncut stream, supporter-selected constraint, timestamped evidence, or another window-integrity mechanism.',
+        `You review Claimroom ${sectionLabel}. Return strict JSON with claimable boolean, score 0-100, verdict, summary, criteria array, suggestions array. Each criteria item must have name, passed, reason, suggestion. A Claimroom setup is claimable only if it is specific, durable, provable, and constrained to the claim window. For proof rules and live setup, focus on evidence quality, saved artifacts, reviewer confidence, live-start integrity, and whether the outcome can be independently checked. Reject vague wording that requires trusting the claimer without live, timestamped, recorded, GPS, witness, public, or independently checkable evidence.`,
     },
     {
       role: 'user',
-      content: `Claim: ${claim}`,
+      content: `${sectionLabel}: ${claim}`,
     },
   ];
 }
 
-async function runOpenAiReview(claim, fallback, apiKey) {
+async function runOpenAiReview(claim, fallback, apiKey, section) {
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -282,7 +438,7 @@ async function runOpenAiReview(claim, fallback, apiKey) {
       body: JSON.stringify({
         model: process.env.OPENAI_CLAIM_VALIDATOR_MODEL || 'gpt-4o-mini',
         response_format: { type: 'json_object' },
-        messages: getValidatorMessages(claim),
+        messages: getValidatorMessages(claim, section),
       }),
     });
 
@@ -300,7 +456,7 @@ async function runOpenAiReview(claim, fallback, apiKey) {
   }
 }
 
-async function runGatewayReview(claim, fallback, apiKey) {
+async function runGatewayReview(claim, fallback, apiKey, section) {
   try {
     const response = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
       method: 'POST',
@@ -311,7 +467,7 @@ async function runGatewayReview(claim, fallback, apiKey) {
       body: JSON.stringify({
         model: process.env.AI_CLAIM_VALIDATOR_MODEL || 'openai/gpt-5.4',
         response_format: { type: 'json_object' },
-        messages: getValidatorMessages(claim),
+        messages: getValidatorMessages(claim, section),
       }),
     });
 
@@ -337,14 +493,15 @@ module.exports = async function handler(request, response) {
   }
 
   const claim = String(request.body?.claim ?? '').trim();
+  const section = reviewSections.has(request.body?.section) ? request.body.section : 'title';
 
   if (!claim) {
     response.status(400).json({ error: 'claim is required' });
     return;
   }
 
-  const fallback = runRubric(claim);
-  const review = await runAiReview(claim, fallback);
+  const fallback = runRubricForSection(claim, section);
+  const review = await runAiReview(claim, fallback, section);
 
   response.status(200).json(review);
 };
