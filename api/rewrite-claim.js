@@ -107,15 +107,103 @@ function cleanInput(content) {
   return content.trim().replace(/[.。]+$/, '');
 }
 
+function hasAnyText(text, words) {
+  const normalized = text.toLowerCase();
+  return words.some((word) => normalized.includes(word));
+}
+
+function appendLineIfMissing(lines, text, words, line) {
+  return hasAnyText(text, words) ? lines : [...lines, line];
+}
+
+function strengthenProofRulesRewrite(content) {
+  const lines = content.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  let nextLines = lines.length > 0 ? lines : [cleanInput(content)];
+  let nextText = nextLines.join('\n');
+
+  nextLines = appendLineIfMissing(
+    nextLines,
+    nextText,
+    ['proof code', 'stream start', 'starts only after', 'claim window'],
+    'The attempt starts only after a live proof code is shown on stream.',
+  );
+  nextText = nextLines.join('\n');
+  nextLines = appendLineIfMissing(
+    nextLines,
+    nextText,
+    ['timestamp', 'check-in', 'check in'],
+    'Timestamped evidence must show the start, key progress points, and final outcome.',
+  );
+  nextText = nextLines.join('\n');
+  nextLines = appendLineIfMissing(
+    nextLines,
+    nextText,
+    ['saved', 'archive', 'link', 'clip', 'recording remains'],
+    'Saved video, clips, public artifacts, or evidence links must remain available for review.',
+  );
+  nextText = nextLines.join('\n');
+  nextLines = appendLineIfMissing(
+    nextLines,
+    nextText,
+    ['reviewer', 'verify', 'independently', 'check'],
+    'The recorded evidence must let a reviewer independently check the claimed outcome.',
+  );
+
+  return nextLines.join('\n');
+}
+
+function strengthenLiveSetupRewrite(content) {
+  const lines = content.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  let nextLines = lines.length > 0 ? lines : [cleanInput(content)];
+  let nextText = nextLines.join('\n');
+
+  nextLines = appendLineIfMissing(
+    nextLines,
+    nextText,
+    ['phone', 'camera', 'gopro', 'go pro', 'screen', 'stream', 'live source'],
+    'A phone, camera, screen share, or live stream source will record the attempt.',
+  );
+  nextText = nextLines.join('\n');
+  nextLines = appendLineIfMissing(
+    nextLines,
+    nextText,
+    ['proof code', 'stream start', 'on camera'],
+    'At stream start, the proof code will be shown on camera.',
+  );
+  nextText = nextLines.join('\n');
+  nextLines = appendLineIfMissing(
+    nextLines,
+    nextText,
+    ['throughout', 'continuous', 'timestamp', 'start', 'finish', 'uncut'],
+    'The setup will capture continuous or timestamped coverage from start through finish.',
+  );
+  nextText = nextLines.join('\n');
+  nextLines = appendLineIfMissing(
+    nextLines,
+    nextText,
+    ['saved', 'archive', 'link', 'clip', 'recording remains'],
+    'Saved recordings, clips, or evidence links will remain available for review.',
+  );
+
+  return nextLines.join('\n');
+}
+
+function strengthenSectionRewrite(content, section) {
+  if (section === 'proofRules') {
+    return strengthenProofRulesRewrite(content);
+  }
+
+  if (section === 'liveSetup') {
+    return strengthenLiveSetupRewrite(content);
+  }
+
+  return content;
+}
+
 function fallbackRewrite(claim, section) {
   if (section === 'proofRules') {
-    const cleanedClaim = cleanInput(claim);
-
     return {
-      rewrittenClaim: `${cleanedClaim}
-The attempt starts only after a live proof code is shown on stream.
-Timestamped evidence must show the start, key progress points, and final outcome.
-Saved video, GPS, witness, public artifact, or recorded evidence must remain available for review.`,
+      rewrittenClaim: strengthenProofRulesRewrite(cleanInput(claim)),
       explanation:
         'Added claim-window integrity, timestamped progress evidence, and saved reviewable proof.',
       source: 'rubric',
@@ -123,11 +211,8 @@ Saved video, GPS, witness, public artifact, or recorded evidence must remain ava
   }
 
   if (section === 'liveSetup') {
-    const cleanedClaim = cleanInput(claim);
-
     return {
-      rewrittenClaim: `${cleanedClaim}
-Live proof will start with a proof code on camera, continue with timestamped updates during the attempt, and keep saved recordings or evidence links for review after the event.`,
+      rewrittenClaim: strengthenLiveSetupRewrite(cleanInput(claim)),
       explanation:
         'Added stream-start proof, continuity, and saved evidence for review.',
       source: 'rubric',
@@ -193,7 +278,7 @@ async function rewriteWithOpenAi(claim, fallback, section) {
     const data = await response.json();
     const content = data?.choices?.[0]?.message?.content;
     const parsed = JSON.parse(content);
-    const rewrittenClaim = String(parsed.rewrittenClaim || '').trim();
+    const rewrittenClaim = strengthenSectionRewrite(String(parsed.rewrittenClaim || '').trim(), section);
 
     if (
       !rewrittenClaim ||

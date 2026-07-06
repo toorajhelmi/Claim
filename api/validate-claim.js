@@ -213,7 +213,7 @@ function runProofRulesRubric(content) {
   const hasLiveStart = hasAny(lower, ['live', 'stream', 'proof code', 'start', 'before', 'window']);
   const hasDurableEvidence = hasAny(lower, ['record', 'recording', 'video', 'clip', 'gps', 'timestamp', 'saved', 'link', 'photo']);
   const hasObjectiveOutcome = hasAny(lower, ['gps', 'location', 'distance', 'finish', 'reach', 'timestamp', 'measured', 'visible', 'check']);
-  const hasIndependentReview = hasAny(lower, ['witness', 'recorder', 'friend', 'review', 'verify', 'independently', 'public']);
+  const hasIndependentReview = hasAny(lower, ['witness', 'recorder', 'friend', 'partner', 'review', 'verify', 'independently', 'public']);
 
   const criteria = [
     scoreCriterion(
