@@ -174,6 +174,13 @@ function strengthenLiveSetupRewrite(content) {
   nextLines = appendLineIfMissing(
     nextLines,
     nextText,
+    ['head view', 'body view', 'full body', 'route', 'location', 'gps', 'angle', 'view', 'screen share'],
+    'The camera view must clearly show the relevant action, route, location, or outcome for AI-assisted verification.',
+  );
+  nextText = nextLines.join('\n');
+  nextLines = appendLineIfMissing(
+    nextLines,
+    nextText,
     ['throughout', 'continuous', 'timestamp', 'start', 'finish', 'uncut'],
     'The setup will capture continuous or timestamped coverage from start through finish.',
   );

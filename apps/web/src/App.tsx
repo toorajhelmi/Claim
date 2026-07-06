@@ -1655,6 +1655,7 @@ function CreateClaimPage() {
                   status={currentReviewState.status}
                   rewriteStatus={currentReviewState.rewriteStatus}
                   onRewrite={() => void handleRewriteSection(currentReviewKey)}
+                  onContinue={currentReviewState.status === 'passed' ? () => void goNext() : undefined}
                 />
               ) : null}
             </>
@@ -1738,12 +1739,14 @@ function ClaimabilityPanel({
   status,
   rewriteStatus,
   onRewrite,
+  onContinue,
 }: {
   label: string;
   review: ClaimabilityReview | null;
   status: ReviewStatus;
   rewriteStatus: RewriteStatus;
   onRewrite: () => void;
+  onContinue?: () => void;
 }) {
   if (status === 'idle') {
     return (
@@ -1779,6 +1782,14 @@ function ClaimabilityPanel({
         <span>{review.score}/100</span>
       </div>
       <p>{review.summary}</p>
+      {review.claimable && onContinue ? (
+        <div className="claimability-actions claimability-actions-top">
+          <button className="button button-primary" type="button" onClick={onContinue}>
+            Continue
+          </button>
+          <small>You can continue now or scan the passed checks below.</small>
+        </div>
+      ) : null}
       {!review.claimable ? (
         <div className="claimability-actions">
           <button

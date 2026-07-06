@@ -271,7 +271,7 @@ function runLiveSetupRubric(content) {
   const lower = normalized.toLowerCase();
   const hasCaptureDevice = hasAny(lower, ['phone', 'camera', 'gopro', 'go pro', 'screen', 'stream', 'live', 'mic', 'audio']);
   const hasCoverage = hasAny(lower, ['head view', 'body view', 'full body', 'route', 'location', 'gps', 'angle', 'view', 'screen share']);
-  const hasSecondSource = hasAny(lower, ['friend', 'recorder', 'witness', 'second', 'another', 'support', 'camera two', '2 cameras']);
+  const hasSecondSource = hasAny(lower, ['friend', 'partner', 'recorder', 'witness', 'second', 'another', 'support', 'camera two', '2 cameras']);
   const hasRecordingPlan = hasAny(lower, ['record', 'recording', 'saved', 'clip', 'upload', 'link', 'archive', 'stream', 'metadata', 'transcript']);
   const hasContinuity = hasAny(lower, ['throughout', 'continuous', 'check-in', 'check in', 'timestamp', 'proof code', 'start', 'finish', 'uncut']);
 
