@@ -706,49 +706,32 @@ function AuthPage({ nextPath }: { nextPath: string }) {
       return;
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email: values.email.trim(),
-      password: values.password,
-      options: {
-        emailRedirectTo,
-        data: {
-          display_name: values.displayName.trim(),
-          handle: values.handle.trim(),
-          primary_platform: values.primaryPlatform,
-          role: 'claimer',
-        },
+    const signupResponse = await fetch('/api/auth-signup', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        displayName: values.displayName.trim(),
+        email: values.email.trim(),
+        handle: values.handle.trim(),
+        password: values.password,
+        primaryPlatform: values.primaryPlatform,
+        redirectTo: emailRedirectTo,
+      }),
     });
 
-    if (error) {
+    if (!signupResponse.ok) {
+      const errorBody = (await signupResponse.json().catch(() => null)) as { error?: string } | null;
       setStatus('error');
-      setMessage(error.message);
+      setMessage(errorBody?.error ?? 'Could not create account.');
       return;
     }
 
-    if (!data.session || !data.user) {
-      setStatus('success');
-      setMessage('Confirmation email sent. Check inbox and spam/promotions.');
-      setConfirmationEmail(values.email.trim());
-      setAuthStage('check-email');
-      return;
-    }
-
-    const { error: profileError } = await supabase.from('profiles').upsert({
-      id: data.user.id,
-      display_name: values.displayName.trim(),
-      handle: nullableString(values.handle),
-      contact_email: values.email.trim(),
-      primary_platform: values.primaryPlatform,
-    });
-
-    if (profileError) {
-      setStatus('error');
-      setMessage(profileError.message);
-      return;
-    }
-
-    window.location.href = safeNextPath;
+    setStatus('success');
+    setMessage('Confirmation email sent through Claimroom. Check inbox and spam/promotions.');
+    setConfirmationEmail(values.email.trim());
+    setAuthStage('check-email');
   }
 
   async function handleResendConfirmation() {
@@ -757,17 +740,25 @@ function AuthPage({ nextPath }: { nextPath: string }) {
     setStatus('submitting');
     setMessage('');
 
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email: confirmationEmail,
-      options: {
-        emailRedirectTo,
+    const signupResponse = await fetch('/api/auth-signup', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        displayName: values.displayName.trim(),
+        email: confirmationEmail,
+        handle: values.handle.trim(),
+        password: values.password,
+        primaryPlatform: values.primaryPlatform,
+        redirectTo: emailRedirectTo,
+      }),
     });
 
-    if (error) {
+    if (!signupResponse.ok) {
+      const errorBody = (await signupResponse.json().catch(() => null)) as { error?: string } | null;
       setStatus('error');
-      setMessage(error.message);
+      setMessage(errorBody?.error ?? 'Could not resend confirmation email.');
       return;
     }
 
