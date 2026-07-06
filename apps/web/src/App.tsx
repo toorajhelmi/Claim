@@ -989,6 +989,8 @@ const claimWizardSteps: ClaimWizardStep[] = [
     key: 'title',
     label: 'What is the claim?',
     helper: 'Make it specific and outcome-based: “I will do X by Y.”',
+    fieldType: 'textarea',
+    rows: 3,
     required: true,
   },
   {
@@ -1076,6 +1078,7 @@ function CreateClaimPage() {
   const [claimabilityStatus, setClaimabilityStatus] = useState<'idle' | 'checking' | 'passed' | 'failed' | 'error'>('idle');
   const [lastReviewedClaim, setLastReviewedClaim] = useState('');
   const [rewriteStatus, setRewriteStatus] = useState<'idle' | 'rewriting' | 'error'>('idle');
+  const [lastRewrite, setLastRewrite] = useState('');
   const currentStep = claimWizardSteps[currentStepIndex];
   const isReviewStep = currentStepIndex === claimWizardSteps.length;
   const progress = Math.round(((currentStepIndex + 1) / (claimWizardSteps.length + 1)) * 100);
@@ -1137,6 +1140,7 @@ function CreateClaimPage() {
       setClaimabilityReview(null);
       setClaimabilityStatus('idle');
       setLastReviewedClaim('');
+      setLastRewrite('');
       setMessage('');
     }
   }
@@ -1239,6 +1243,7 @@ function CreateClaimPage() {
       ...currentValues,
       title: rewrittenClaim,
     }));
+    setLastRewrite(rewrittenClaim);
 
     try {
       const review = await reviewClaimValue(rewrittenClaim);
@@ -1402,6 +1407,12 @@ function CreateClaimPage() {
           ) : (
             <>
               <WizardField step={currentStep} value={values[currentStep.key]} onChange={updateValue} />
+              {currentStep.key === 'title' && lastRewrite ? (
+                <div className="rewrite-applied">
+                  <span>Applied rewritten claim</span>
+                  <p>{lastRewrite}</p>
+                </div>
+              ) : null}
               {currentStep.key === 'title' ? (
                 <ClaimabilityPanel
                   review={claimabilityReview}
