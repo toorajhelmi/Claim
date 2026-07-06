@@ -3,6 +3,10 @@ function normalizeFutureClaim(claim) {
   const cleanedClaim = claim
     .trim()
     .replace(/[.。]+$/, '')
+    .replace(
+      /^on\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},\s*(20\d{2}),\s*/i,
+      (match, year) => (Number(year) < currentYear ? '' : match),
+    )
     .replace(/,\s*(proving|proved)\s+I\s+can\b.*$/i, '')
     .replace(/\s+by\s+[A-Z][a-z]+\s+\d{1,2},\s+(20\d{2})\b/gi, (match, year) =>
       Number(year) < currentYear ? '' : match,
@@ -64,6 +68,39 @@ function isFutureClaim(claim) {
   );
 }
 
+function normalizeForComparison(text) {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractMatches(text, pattern) {
+  return (text.match(pattern) || []).map((match) => normalizeForComparison(match));
+}
+
+function hasAddedMatches(original, rewritten, pattern) {
+  const originalText = normalizeForComparison(original);
+
+  return extractMatches(rewritten, pattern).some((match) => !originalText.includes(match));
+}
+
+function hasUnsupportedAddedFacts(original, rewritten) {
+  const datePattern =
+    /\b(?:on\s+)?(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:,\s*20\d{2})?\b|\b20\d{2}\b/gi;
+  const distancePattern = /\b\d+(?:\.\d+)?\s*(?:miles?|mi|kilometers?|km)\b/gi;
+  const timeTargetPattern = /\b(?:under|less than|within|in)\s+\d+(?:\.\d+)?\s*(?:hours?|hrs?|minutes?|mins?)\b/gi;
+  const namedPlacePattern = /\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+|[A-Z]{2,})\b/g;
+
+  return (
+    hasAddedMatches(original, rewritten, datePattern) ||
+    hasAddedMatches(original, rewritten, distancePattern) ||
+    hasAddedMatches(original, rewritten, timeTargetPattern) ||
+    hasAddedMatches(original, rewritten, namedPlacePattern)
+  );
+}
+
 function fallbackRewrite(claim) {
   const futureClaim = normalizeFutureClaim(claim);
 
@@ -96,7 +133,7 @@ async function rewriteWithOpenAi(claim, fallback) {
           {
             role: 'system',
             content:
-              'Rewrite Claimroom claim titles. Return strict JSON with rewrittenClaim and explanation. Preserve the claimer intent, but make the claim specific, exciting, durable, provable, and constrained to the claim window. The rewrittenClaim must be a future-tense commitment that starts exactly with "I will". Never write as if the claimer already completed it. Never use phrases like "I successfully completed", "I proved", "I have", "I ran", or "proving I can". Do not invent calendar dates; if no date is provided, say "by the declared deadline" or "within the declared claim window". Include live proof, proof code or stream-start constraint, timestamped evidence, objective outcome, and deadline/window language. Keep it as one first-person claim sentence. Do not add unsafe or illegal behavior.',
+              'Rewrite Claimroom claim titles. Return strict JSON with rewrittenClaim and explanation. Preserve the claimer intent, but make the claim specific, exciting, durable, provable, and constrained to the claim window. Accuracy is mandatory: do not invent or guess facts. Do not add calendar dates, distances, pace targets, time targets, named places, exact addresses, route names, or measurements unless they appear in the original claim. If a measurement is unknown, say it must be proven by live, GPS, timestamped, witness, or recorded evidence instead of guessing a number. The rewrittenClaim must be a future-tense commitment that starts exactly with "I will". Never write as if the claimer already completed it. Never use phrases like "I successfully completed", "I proved", "I have", "I ran", or "proving I can". If no deadline is provided, say "by the declared deadline" or "within the declared claim window". Include live proof, proof code or stream-start constraint, timestamped evidence, objective outcome, and deadline/window language. Keep it as one first-person claim sentence. Do not add unsafe or illegal behavior.',
           },
           {
             role: 'user',
@@ -115,7 +152,7 @@ async function rewriteWithOpenAi(claim, fallback) {
     const parsed = JSON.parse(content);
     const rewrittenClaim = String(parsed.rewrittenClaim || '').trim();
 
-    if (!rewrittenClaim || !isFutureClaim(rewrittenClaim)) {
+    if (!rewrittenClaim || !isFutureClaim(rewrittenClaim) || hasUnsupportedAddedFacts(claim, rewrittenClaim)) {
       return fallback;
     }
 
