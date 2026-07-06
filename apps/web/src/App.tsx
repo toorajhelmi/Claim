@@ -287,6 +287,23 @@ function createInitialSectionReviewState(): Record<ReviewableStepKey, SectionRev
   };
 }
 
+async function requestSectionReview(section: ReviewableStepKey, claim: string) {
+  const response = await fetch('/api/validate-claim', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ claim, section }),
+  });
+
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(errorBody?.error ?? `Could not review ${reviewableStepLabels[section].toLowerCase()}. Try again.`);
+  }
+
+  return (await response.json()) as ClaimabilityReview;
+}
+
 const defaultCityRules = [
   'Live stream starts at the declared start point.',
   'Route decisions must come from live supporter chat or votes.',
@@ -1243,6 +1260,35 @@ const claimWizardSteps: ClaimWizardStep[] = [
   },
 ];
 
+async function refineClaimWizardValues(values: ClaimWizardValues): Promise<ClaimWizardValues> {
+  try {
+    const response = await fetch('/api/refine-claim', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(values),
+    });
+
+    if (!response.ok) {
+      return values;
+    }
+
+    const refined = (await response.json()) as Partial<ClaimWizardValues>;
+
+    return {
+      ...values,
+      title: refined.title?.trim() || values.title,
+      description: refined.description?.trim() || values.description,
+      proofRules: refined.proofRules?.trim() || values.proofRules,
+      liveSetup: refined.liveSetup?.trim() || values.liveSetup,
+      supporterInteraction: refined.supporterInteraction?.trim() || values.supporterInteraction,
+    };
+  } catch {
+    return values;
+  }
+}
+
 function CreateClaimPage() {
   const [values, setValues] = useState<ClaimWizardValues>({
     title: '',
@@ -1371,20 +1417,7 @@ function CreateClaimPage() {
   }
 
   async function reviewSectionValue(section: ReviewableStepKey, claim: string) {
-    const response = await fetch('/api/validate-claim', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ claim, section }),
-    });
-
-    if (!response.ok) {
-      const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
-      throw new Error(errorBody?.error ?? `Could not review ${reviewableStepLabels[section].toLowerCase()}. Try again.`);
-    }
-
-    return (await response.json()) as ClaimabilityReview;
+    return requestSectionReview(section, claim);
   }
 
   async function validateReviewSection(section: ReviewableStepKey) {
@@ -1525,7 +1558,7 @@ function CreateClaimPage() {
     setCurrentStepIndex((stepIndex) => Math.max(stepIndex - 1, 0));
   }
 
-  async function handleCreateClaim() {
+  async function handleCreateClaim({ redirectToHome = false }: { redirectToHome?: boolean } = {}) {
     setStatus('submitting');
     setMessage('');
 
@@ -1535,12 +1568,15 @@ function CreateClaimPage() {
       return;
     }
 
-    const title = values.title.trim();
+    const refinedValues = await refineClaimWizardValues(values);
+    setValues(refinedValues);
+
+    const title = refinedValues.title.trim();
     const creatorName = claimerProfile.display_name || claimerProfile.contact_email?.split('@')[0] || 'Claimer';
     const slug = createSlug(title);
-    const proofRules = parseProofRules(values.proofRules);
-    const liveSetup = nullableString(values.liveSetup);
-    const supporterInteraction = nullableString(values.supporterInteraction);
+    const proofRules = parseProofRules(refinedValues.proofRules);
+    const liveSetup = nullableString(refinedValues.liveSetup);
+    const supporterInteraction = nullableString(refinedValues.supporterInteraction);
 
     const claimPayload = {
       slug,
@@ -1552,7 +1588,7 @@ function CreateClaimPage() {
       claim_type: 'live_claim' as const,
       status: 'draft' as const,
       title,
-      description: nullableString(values.description),
+      description: nullableString(refinedValues.description),
       teaser_title: title,
       teaser_description: `${creatorName}'s live claim setup is being prepared for backing.`,
       stake_amount_cents: dollarsToCents(values.stakeAmount),
@@ -1608,7 +1644,7 @@ function CreateClaimPage() {
     }
 
     setStatus('success');
-    window.location.href = `/claims/${claim.slug}`;
+    window.location.href = redirectToHome ? '/' : `/claims/${claim.slug}`;
   }
 
   if (authLoading) {
@@ -1670,9 +1706,19 @@ function CreateClaimPage() {
               </button>
             ) : null}
             {isReviewStep ? (
-              <button className="button button-primary" type="button" onClick={() => void handleCreateClaim()} disabled={status === 'submitting'}>
-                {status === 'submitting' ? 'Creating...' : 'Create claim'}
-              </button>
+              <>
+                <button className="button button-primary" type="button" onClick={() => void handleCreateClaim()} disabled={status === 'submitting'}>
+                  {status === 'submitting' ? 'Creating...' : 'Create claim'}
+                </button>
+                <button
+                  className="button button-ghost"
+                  type="button"
+                  onClick={() => void handleCreateClaim({ redirectToHome: true })}
+                  disabled={status === 'submitting'}
+                >
+                  Save for later
+                </button>
+              </>
             ) : (
               <button className="button button-primary" type="button" onClick={() => void goNext()} disabled={!canContinue}>
                 {currentReviewState?.status === 'checking'
@@ -2044,9 +2090,42 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     const liveSetup = nullableString(formData.get('liveSetup'));
     const supporterInteraction = nullableString(formData.get('supporterInteraction'));
 
-    if (!title || proofRules.length === 0) {
-      setSetupMessage('Claim title and proof rules are required.');
+    if (!title || proofRules.length === 0 || !liveSetup) {
+      setSetupMessage('Claim title, proof rules, and live proof setup are required.');
       return;
+    }
+
+    const currentProofRules = data.proofRules.map((rule) => rule.rule).join('\n').trim();
+    const changedReviewSections: Array<[ReviewableStepKey, string]> = [
+      ['title', title],
+      ['proofRules', proofRules.join('\n')],
+      ['liveSetup', liveSetup],
+    ].filter(([section, value]) => {
+      const currentValue = section === 'title'
+        ? data.claim.title.trim()
+        : section === 'proofRules'
+          ? currentProofRules
+          : (data.claim.event_context ?? '').trim();
+
+      return value.trim() !== currentValue;
+    }) as Array<[ReviewableStepKey, string]>;
+
+    if (changedReviewSections.length > 0) {
+      setSetupMessage('Reviewing updated claim details...');
+
+      try {
+        for (const [section, value] of changedReviewSections) {
+          const review = await requestSectionReview(section, value);
+
+          if (!review.claimable) {
+            setSetupMessage(`${reviewableStepLabels[section]} needs tightening before this edit can be saved.`);
+            return;
+          }
+        }
+      } catch (reviewError) {
+        setSetupMessage(reviewError instanceof Error ? reviewError.message : 'Could not review updated draft details.');
+        return;
+      }
     }
 
     const proofSummary = [
@@ -2147,7 +2226,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                 </label>
                 <label>
                   Live proof setup
-                  <textarea name="liveSetup" rows={4} defaultValue={data.claim.event_context ?? ''} />
+                  <textarea name="liveSetup" rows={4} required defaultValue={data.claim.event_context ?? ''} />
                 </label>
                 <label>
                   Supporter interaction
@@ -2252,9 +2331,6 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                     <button className="button button-primary" type="button" onClick={() => setDraftReviewMode('activate')}>
                       Activate
                     </button>
-                    <a className="button button-ghost" href="/">
-                      Save for later
-                    </a>
                     <button className="button button-ghost" type="button" onClick={() => setDraftReviewMode('edit')}>
                       Edit
                     </button>
