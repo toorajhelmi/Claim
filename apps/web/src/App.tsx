@@ -339,7 +339,134 @@ export function App() {
     return <RecorderInvitePage token={route.token} />;
   }
 
-  return <LandingPage />;
+  return <HomePage />;
+}
+
+function HomePage() {
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [myClaims, setMyClaims] = useState<Claim[]>([]);
+  const [supportClaims, setSupportClaims] = useState<Claim[]>([]);
+
+  useEffect(() => {
+    async function loadHome() {
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUserId = userData.user?.id ?? null;
+      setUserId(currentUserId);
+
+      if (!currentUserId) {
+        setLoading(false);
+        return;
+      }
+
+      const [mine, supportable] = await Promise.all([
+        supabase
+          .from('claims')
+          .select('*')
+          .eq('creator_id', currentUserId)
+          .order('created_at', { ascending: false })
+          .limit(8),
+        supabase
+          .from('claims')
+          .select('*')
+          .neq('creator_id', currentUserId)
+          .in('status', ['preview', 'open_for_backing', 'threshold_met', 'scheduled', 'live'])
+          .order('created_at', { ascending: false })
+          .limit(8),
+      ]);
+
+      setMyClaims((mine.data ?? []) as Claim[]);
+      setSupportClaims((supportable.data ?? []) as Claim[]);
+      setLoading(false);
+    }
+
+    void loadHome();
+  }, []);
+
+  if (loading) {
+    return <LoadingPage label="Loading Claimroom home..." />;
+  }
+
+  if (!userId) {
+    return <LandingPage />;
+  }
+
+  return (
+    <AppChrome>
+      <main className="app-page section-shell">
+        <section className="dashboard-hero">
+          <div>
+            <p className="eyebrow">Claimroom home</p>
+            <h1 className="page-title">Your claim room.</h1>
+            <p className="page-lede">
+              Continue drafting your claims, activate proof setup, or back claims that are already open.
+            </p>
+          </div>
+          <a className="button button-primary" href="/claims/new">
+            New claim
+          </a>
+        </section>
+
+        <div className="mvp-layout">
+          <section className="mvp-panel">
+            <div className="panel-heading-row">
+              <div>
+                <p className="eyebrow">My claims</p>
+                <h2>Drafts and active claims</h2>
+              </div>
+              <a className="button button-ghost" href="/claims/new">
+                Create
+              </a>
+            </div>
+            <ClaimCardList
+              claims={myClaims}
+              emptyText="No claims yet. Start with a draft and activate it when proof setup is ready."
+              ownerView
+            />
+          </section>
+
+          <aside className="mvp-panel">
+            <p className="eyebrow">Support</p>
+            <h2>Claims you can back</h2>
+            <ClaimCardList
+              claims={supportClaims}
+              emptyText="No public claims are open for backing yet."
+            />
+          </aside>
+        </div>
+      </main>
+    </AppChrome>
+  );
+}
+
+function ClaimCardList({
+  claims,
+  emptyText,
+  ownerView = false,
+}: {
+  claims: Claim[];
+  emptyText: string;
+  ownerView?: boolean;
+}) {
+  if (claims.length === 0) {
+    return <p className="form-message">{emptyText}</p>;
+  }
+
+  return (
+    <div className="claim-card-list">
+      {claims.map((claim) => (
+        <a className="claim-card-row" href={`/claims/${claim.slug}`} key={claim.id}>
+          <span>{claim.status.replace(/_/g, ' ')}</span>
+          <strong>{claim.title}</strong>
+          <small>
+            {ownerView && claim.status === 'draft'
+              ? 'Draft setup - activate when ready'
+              : `${formatMoney(claim.pledge_pool_cents)} pledged · ${claim.supporter_count} supporters`}
+          </small>
+        </a>
+      ))}
+    </div>
+  );
 }
 
 function LandingPage() {
@@ -707,6 +834,8 @@ function getRoute(pathname: string):
 }
 
 function AppChrome({ children }: { children: ReactNode }) {
+  const isCreatePage = window.location.pathname === '/claims/new';
+
   return (
     <>
       <div className="ambient ambient-one" />
@@ -722,9 +851,11 @@ function AppChrome({ children }: { children: ReactNode }) {
           <a href="/claims/cross-city-by-sunset">Demo claim</a>
           <a href="/">Landing</a>
         </nav>
-        <a className="nav-cta" href="/claims/new">
-          Run a claim
-        </a>
+        {isCreatePage ? null : (
+          <a className="nav-cta" href="/claims/new">
+            Run a claim
+          </a>
+        )}
       </header>
       {children}
     </>
