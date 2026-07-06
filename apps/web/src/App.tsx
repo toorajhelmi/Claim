@@ -226,6 +226,12 @@ type ClaimabilityReview = {
   source: 'openai' | 'ai-gateway' | 'rubric';
 };
 
+type ClaimRewrite = {
+  rewrittenClaim: string;
+  explanation: string;
+  source: 'openai' | 'rubric';
+};
+
 const defaultCityRules = [
   'Live stream starts at the declared start point.',
   'Route decisions must come from live supporter chat or votes.',
@@ -1069,6 +1075,7 @@ function CreateClaimPage() {
   const [claimabilityReview, setClaimabilityReview] = useState<ClaimabilityReview | null>(null);
   const [claimabilityStatus, setClaimabilityStatus] = useState<'idle' | 'checking' | 'passed' | 'failed' | 'error'>('idle');
   const [lastReviewedClaim, setLastReviewedClaim] = useState('');
+  const [rewriteStatus, setRewriteStatus] = useState<'idle' | 'rewriting' | 'error'>('idle');
   const currentStep = claimWizardSteps[currentStepIndex];
   const isReviewStep = currentStepIndex === claimWizardSteps.length;
   const progress = Math.round(((currentStepIndex + 1) / (claimWizardSteps.length + 1)) * 100);
@@ -1167,6 +1174,90 @@ function CreateClaimPage() {
 
     setClaimabilityStatus('passed');
     return true;
+  }
+
+  async function reviewClaimValue(claim: string) {
+    const response = await fetch('/api/validate-claim', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ claim }),
+    });
+
+    if (!response.ok) {
+      const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(errorBody?.error ?? 'Could not review the claim. Try again.');
+    }
+
+    return (await response.json()) as ClaimabilityReview;
+  }
+
+  async function handleRewriteClaim() {
+    const claim = values.title.trim();
+
+    if (!claim) {
+      return;
+    }
+
+    setRewriteStatus('rewriting');
+    setMessage('');
+
+    let response: Response;
+
+    try {
+      response = await fetch('/api/rewrite-claim', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ claim }),
+      });
+    } catch {
+      setRewriteStatus('error');
+      setMessage('Could not rewrite the claim. Try again.');
+      return;
+    }
+
+    if (!response.ok) {
+      const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
+      setRewriteStatus('error');
+      setMessage(errorBody?.error ?? 'Could not rewrite the claim. Try again.');
+      return;
+    }
+
+    const rewrite = (await response.json()) as ClaimRewrite;
+    const rewrittenClaim = rewrite.rewrittenClaim.trim();
+
+    if (!rewrittenClaim) {
+      setRewriteStatus('error');
+      setMessage('Could not rewrite the claim. Try adding more detail first.');
+      return;
+    }
+
+    setValues((currentValues) => ({
+      ...currentValues,
+      title: rewrittenClaim,
+    }));
+
+    try {
+      const review = await reviewClaimValue(rewrittenClaim);
+      setClaimabilityReview(review);
+      setLastReviewedClaim(rewrittenClaim);
+      setClaimabilityStatus(review.claimable ? 'passed' : 'failed');
+      setRewriteStatus('idle');
+      setMessage(
+        review.claimable
+          ? 'Rewritten into a claimable version. You can continue or edit it.'
+          : 'Rewritten, but it still needs tightening.',
+      );
+    } catch (error) {
+      setClaimabilityReview(null);
+      setClaimabilityStatus('idle');
+      setLastReviewedClaim('');
+      setRewriteStatus('error');
+      setMessage(error instanceof Error ? error.message : 'Could not review rewritten claim.');
+    }
   }
 
   async function goNext() {
@@ -1312,7 +1403,12 @@ function CreateClaimPage() {
             <>
               <WizardField step={currentStep} value={values[currentStep.key]} onChange={updateValue} />
               {currentStep.key === 'title' ? (
-                <ClaimabilityPanel review={claimabilityReview} status={claimabilityStatus} />
+                <ClaimabilityPanel
+                  review={claimabilityReview}
+                  status={claimabilityStatus}
+                  rewriteStatus={rewriteStatus}
+                  onRewrite={() => void handleRewriteClaim()}
+                />
               ) : null}
             </>
           )}
@@ -1331,7 +1427,7 @@ function CreateClaimPage() {
               <button className="button button-primary" type="button" onClick={() => void goNext()} disabled={!canContinue}>
                 {claimabilityStatus === 'checking'
                   ? 'Reviewing...'
-                  : currentStep.key === 'title'
+                  : currentStep.key === 'title' && claimabilityStatus !== 'passed'
                     ? 'Review claim'
                     : 'Continue'}
               </button>
@@ -1392,9 +1488,13 @@ function WizardField({
 function ClaimabilityPanel({
   review,
   status,
+  rewriteStatus,
+  onRewrite,
 }: {
   review: ClaimabilityReview | null;
   status: 'idle' | 'checking' | 'passed' | 'failed' | 'error';
+  rewriteStatus: 'idle' | 'rewriting' | 'error';
+  onRewrite: () => void;
 }) {
   if (status === 'idle') {
     return (
@@ -1430,6 +1530,18 @@ function ClaimabilityPanel({
         <span>{review.score}/100</span>
       </div>
       <p>{review.summary}</p>
+      {!review.claimable ? (
+        <div className="claimability-actions">
+          <button
+            className="button button-primary"
+            type="button"
+            onClick={onRewrite}
+            disabled={rewriteStatus === 'rewriting'}
+          >
+            {rewriteStatus === 'rewriting' ? 'Rewriting...' : 'Rewrite to make claimable'}
+          </button>
+        </div>
+      ) : null}
       <div className="claimability-checks">
         {review.criteria.map((criterion) => (
           <div className={criterion.passed ? 'passed' : 'failed'} key={criterion.name}>
@@ -1439,31 +1551,8 @@ function ClaimabilityPanel({
           </div>
         ))}
       </div>
-      {!review.claimable && review.suggestions.length > 0 ? (
-        <div className="claimability-suggestions">
-          <strong>Make it claimable:</strong>
-          <ul>
-            {review.suggestions.map((suggestion) => (
-              <li key={suggestion}>{suggestion}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      <small>Review source: {formatReviewSource(review.source)}</small>
     </div>
   );
-}
-
-function formatReviewSource(source: ClaimabilityReview['source']) {
-  if (source === 'openai') {
-    return 'OpenAI';
-  }
-
-  if (source === 'ai-gateway') {
-    return 'AI Gateway';
-  }
-
-  return 'Claimroom rubric fallback';
 }
 
 function ClaimWizardReview({ values }: { values: ClaimWizardValues }) {
