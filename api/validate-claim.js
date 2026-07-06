@@ -205,33 +205,84 @@ function runRubric(claim) {
 }
 
 async function runAiReview(claim, fallback) {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
+  const openAiKey = process.env.OPENAI_API_KEY;
+  const gatewayKey = process.env.AI_GATEWAY_API_KEY;
 
-  if (!apiKey) {
-    return fallback;
+  if (openAiKey) {
+    const review = await runOpenAiReview(claim, fallback, openAiKey);
+
+    if (review.source === 'openai') {
+      return review;
+    }
   }
 
+  if (gatewayKey) {
+    const review = await runGatewayReview(claim, fallback, gatewayKey);
+
+    if (review.source === 'ai-gateway') {
+      return review;
+    }
+  }
+
+  return fallback;
+}
+
+function normalizeAiReview(parsed, fallback, source) {
+  const normalized = {
+    ...fallback,
+    ...parsed,
+    source,
+  };
+
+  normalized.score = Math.max(0, Math.min(100, Number(normalized.score) || fallback.score));
+  normalized.claimable = Boolean(normalized.claimable);
+  normalized.verdict = String(normalized.verdict || fallback.verdict);
+  normalized.summary = String(normalized.summary || fallback.summary);
+  normalized.criteria = Array.isArray(normalized.criteria) && normalized.criteria.length > 0
+    ? normalized.criteria
+    : fallback.criteria;
+  normalized.suggestions = Array.isArray(normalized.suggestions)
+    ? normalized.suggestions
+    : fallback.suggestions;
+
+  if (!fallback.claimable) {
+    normalized.claimable = false;
+    normalized.score = Math.min(normalized.score, fallback.score);
+    normalized.verdict = 'Needs tightening';
+    normalized.summary = fallback.summary;
+    normalized.criteria = fallback.criteria;
+    normalized.suggestions = fallback.suggestions;
+  }
+
+  return normalized;
+}
+
+function getValidatorMessages(claim) {
+  return [
+    {
+      role: 'system',
+      content:
+        'You review Claimroom claims. Return strict JSON with claimable boolean, score 0-100, verdict, summary, criteria array, suggestions array. Each criteria item must have name, passed, reason, suggestion. A claim is claimable only if it is exciting, durable, provable, and either novel or provably constrained to the claim window. Reject generic claims and claims that could have been secretly completed before the claim began unless the wording includes live-from-start proof, randomized reveal, proof code, uncut stream, supporter-selected constraint, timestamped evidence, or another window-integrity mechanism.',
+    },
+    {
+      role: 'user',
+      content: `Claim: ${claim}`,
+    },
+  ];
+}
+
+async function runOpenAiReview(claim, fallback, apiKey) {
   try {
-    const response = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: process.env.AI_CLAIM_VALIDATOR_MODEL || 'openai/gpt-5.4',
+        model: process.env.OPENAI_CLAIM_VALIDATOR_MODEL || 'gpt-4o-mini',
         response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You review Claimroom claims. Return strict JSON with claimable boolean, score 0-100, verdict, summary, criteria array, suggestions array. A claim is claimable only if it is exciting, durable, provable, and either novel or provably constrained to the claim window.',
-          },
-          {
-            role: 'user',
-            content: `Claim: ${claim}`,
-          },
-        ],
+        messages: getValidatorMessages(claim),
       }),
     });
 
@@ -243,11 +294,36 @@ async function runAiReview(claim, fallback) {
     const content = data?.choices?.[0]?.message?.content;
     const parsed = JSON.parse(content);
 
-    return {
-      ...fallback,
-      ...parsed,
-      source: 'ai',
-    };
+    return normalizeAiReview(parsed, fallback, 'openai');
+  } catch {
+    return fallback;
+  }
+}
+
+async function runGatewayReview(claim, fallback, apiKey) {
+  try {
+    const response = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: process.env.AI_CLAIM_VALIDATOR_MODEL || 'openai/gpt-5.4',
+        response_format: { type: 'json_object' },
+        messages: getValidatorMessages(claim),
+      }),
+    });
+
+    if (!response.ok) {
+      return fallback;
+    }
+
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content;
+    const parsed = JSON.parse(content);
+
+    return normalizeAiReview(parsed, fallback, 'ai-gateway');
   } catch {
     return fallback;
   }

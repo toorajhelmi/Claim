@@ -223,7 +223,7 @@ type ClaimabilityReview = {
   summary: string;
   criteria: ClaimabilityCriterion[];
   suggestions: string[];
-  source: 'ai' | 'rubric';
+  source: 'openai' | 'ai-gateway' | 'rubric';
 };
 
 const defaultCityRules = [
@@ -1449,9 +1449,21 @@ function ClaimabilityPanel({
           </ul>
         </div>
       ) : null}
-      <small>Review source: {review.source === 'ai' ? 'AI model' : 'Claimroom rubric fallback'}</small>
+      <small>Review source: {formatReviewSource(review.source)}</small>
     </div>
   );
+}
+
+function formatReviewSource(source: ClaimabilityReview['source']) {
+  if (source === 'openai') {
+    return 'OpenAI';
+  }
+
+  if (source === 'ai-gateway') {
+    return 'AI Gateway';
+  }
+
+  return 'Claimroom rubric fallback';
 }
 
 function ClaimWizardReview({ values }: { values: ClaimWizardValues }) {
