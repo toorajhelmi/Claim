@@ -460,7 +460,7 @@ function ClaimCardList({
           <strong>{claim.title}</strong>
           <small>
             {ownerView && claim.status === 'draft'
-              ? 'Draft setup - activate when ready'
+              ? 'Draft - review when ready'
               : `${formatMoney(claim.pledge_pool_cents)} pledged · ${claim.supporter_count} supporters`}
           </small>
         </a>
@@ -1475,7 +1475,7 @@ function CreateClaimPage() {
       });
       setMessage(
         review.claimable
-          ? `${reviewableStepLabels[section]} rewritten and accepted. You can continue or edit it.`
+          ? `${reviewableStepLabels[section]} rewritten and accepted. You can continue or undo it.`
           : `${reviewableStepLabels[section]} rewritten, but it still needs tightening.`,
       );
     } catch (error) {
@@ -1636,7 +1636,9 @@ function CreateClaimPage() {
             <ClaimWizardReview values={values} />
           ) : (
             <>
-              <WizardField step={currentStep} value={values[currentStep.key]} onChange={updateValue} />
+              {currentReviewState?.lastRewrite ? null : (
+                <WizardField step={currentStep} value={values[currentStep.key]} onChange={updateValue} />
+              )}
               {currentReviewKey && currentReviewState?.lastRewrite ? (
                 <div className="rewrite-applied">
                   <span>Applied rewritten {reviewableStepLabels[currentReviewKey].toLowerCase()}</span>
@@ -1928,6 +1930,10 @@ function ClaimDetailPage({ slug }: { slug: string }) {
   const [pledgeMessage, setPledgeMessage] = useState('');
   const [inviteLink, setInviteLink] = useState('');
   const [setupMessage, setSetupMessage] = useState('');
+  const [draftMode, setDraftMode] = useState<'review' | 'activate' | 'edit'>(() => {
+    const mode = new URLSearchParams(window.location.search).get('mode');
+    return mode === 'activate' || mode === 'edit' ? mode : 'review';
+  });
 
   useEffect(() => {
     async function loadCurrentUser() {
@@ -2007,7 +2013,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     if (!data) return;
 
     if (data.recorderInvites.length === 0) {
-      setSetupMessage('Add yourself or invite at least one recorder before activating.');
+      setSetupMessage('Add recording access before activating.');
       return;
     }
 
@@ -2020,12 +2026,248 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     if (!updateError) await reload();
   }
 
+  function setDraftReviewMode(nextMode: 'review' | 'activate' | 'edit') {
+    setDraftMode(nextMode);
+    setSetupMessage('');
+    setInviteLink('');
+    const nextUrl = nextMode === 'review' ? `/claims/${slug}` : `/claims/${slug}?mode=${nextMode}`;
+    window.history.replaceState(null, '', nextUrl);
+  }
+
+  async function handleUpdateDraft(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!data) return;
+
+    const formData = new FormData(event.currentTarget);
+    const title = String(formData.get('title') || '').trim();
+    const proofRules = parseProofRules(String(formData.get('proofRules') || ''));
+    const liveSetup = nullableString(formData.get('liveSetup'));
+    const supporterInteraction = nullableString(formData.get('supporterInteraction'));
+
+    if (!title || proofRules.length === 0) {
+      setSetupMessage('Claim title and proof rules are required.');
+      return;
+    }
+
+    const proofSummary = [
+      proofRules.join('\n'),
+      liveSetup ? `Live setup: ${liveSetup}` : '',
+      supporterInteraction ? `Supporter interaction: ${supporterInteraction}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    const { error: claimError } = await supabase
+      .from('claims')
+      .update({
+        title,
+        description: nullableString(formData.get('description')),
+        teaser_title: title,
+        stake_amount_cents: dollarsToCents(formData.get('stakeAmount')),
+        pledge_threshold_cents: dollarsToCents(formData.get('pledgeThreshold')),
+        live_starts_at: nullableDateTime(formData.get('liveStartsAt')),
+        deadline_at: nullableDateTime(formData.get('deadlineAt')),
+        proof_summary: proofSummary,
+        event_context: liveSetup,
+        destination_rule: supporterInteraction,
+      })
+      .eq('id', data.claim.id);
+
+    if (claimError) {
+      setSetupMessage(claimError.message);
+      return;
+    }
+
+    const { error: deleteError } = await supabase.from('claim_proof_rules').delete().eq('claim_id', data.claim.id);
+
+    if (deleteError) {
+      setSetupMessage(deleteError.message);
+      return;
+    }
+
+    const { error: insertError } = await supabase.from('claim_proof_rules').insert(
+      proofRules.map((rule, index) => ({
+        claim_id: data.claim.id,
+        position: index + 1,
+        rule,
+      })),
+    );
+
+    if (!insertError) {
+      setDraftReviewMode('review');
+      await reload();
+      setSetupMessage('Draft updated.');
+      return;
+    }
+
+    setSetupMessage(insertError.message);
+  }
+
   if (loading) return <LoadingPage label="Loading claim..." />;
   if (error || !data) return <ErrorPage message={error ?? 'Claim not found.'} />;
 
   const isDraft = data.claim.status === 'draft';
   const isOwner = currentUserId === data.claim.creator_id;
   const recorderSuggestion = inferRecorderSetup(data.claim, data.proofRules);
+
+  if (isDraft && isOwner) {
+    return (
+      <AppChrome>
+        <main className="app-page section-shell">
+          <section className="draft-review-hero">
+            <p className="eyebrow">Review draft</p>
+            <h1>Review before activation.</h1>
+            <p>
+              Check the claim preview and proof details. You can activate to add recorder and launch
+              details, save it for later, or edit the draft.
+            </p>
+          </section>
+
+          {draftMode === 'edit' ? (
+            <section className="mvp-panel">
+              <p className="eyebrow">Edit draft</p>
+              <h2>Update claim details.</h2>
+              <form className="compact-form draft-edit-form" onSubmit={handleUpdateDraft}>
+                <label>
+                  Claim
+                  <textarea name="title" rows={3} required defaultValue={data.claim.title} />
+                </label>
+                <label>
+                  Why should people care?
+                  <textarea name="description" rows={4} defaultValue={data.claim.description ?? ''} />
+                </label>
+                <label>
+                  Proof rules
+                  <textarea
+                    name="proofRules"
+                    rows={6}
+                    required
+                    defaultValue={data.proofRules.map((rule) => rule.rule).join('\n')}
+                  />
+                </label>
+                <label>
+                  Live proof setup
+                  <textarea name="liveSetup" rows={4} defaultValue={data.claim.event_context ?? ''} />
+                </label>
+                <label>
+                  Supporter interaction
+                  <textarea name="supporterInteraction" rows={3} defaultValue={data.claim.destination_rule ?? ''} />
+                </label>
+                <div className="form-grid">
+                  <FormField label="Stake amount ($)" name="stakeAmount" type="number" defaultValue={String(data.claim.stake_amount_cents / 100)} />
+                  <FormField label="Pledge threshold ($)" name="pledgeThreshold" type="number" defaultValue={String(data.claim.pledge_threshold_cents / 100)} />
+                  <FormField label="Live start" name="liveStartsAt" type="datetime-local" defaultValue={toDateTimeLocalValue(data.claim.live_starts_at)} />
+                  <FormField label="Deadline" name="deadlineAt" type="datetime-local" defaultValue={toDateTimeLocalValue(data.claim.deadline_at)} />
+                </div>
+                <div className="action-row">
+                  <button className="button button-primary" type="submit">Save changes</button>
+                  <button className="button button-ghost" type="button" onClick={() => setDraftReviewMode('review')}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+              {setupMessage ? <p className="form-message">{setupMessage}</p> : null}
+            </section>
+          ) : (
+            <>
+              <div className="mvp-layout">
+                <section className="mvp-panel draft-preview-panel">
+                  <p className="eyebrow">Claim preview</p>
+                  <h2>{data.claim.title}</h2>
+                  {data.claim.description ? <p>{data.claim.description}</p> : null}
+                  <ProofRules rules={data.proofRules} />
+                </section>
+
+                <aside className="mvp-panel">
+                  <p className="eyebrow">Review details</p>
+                  <Metric label="Status" value="Draft" />
+                  <Metric label="Stake" value={formatMoney(data.claim.stake_amount_cents)} />
+                  <Metric label="Pledge goal" value={formatMoney(data.claim.pledge_threshold_cents)} />
+                  <Metric label="Live start" value={formatDateTime(data.claim.live_starts_at)} />
+                  <Metric label="Deadline" value={formatDateTime(data.claim.deadline_at)} />
+                </aside>
+              </div>
+
+              {draftMode === 'activate' ? (
+                <section className="mvp-panel">
+                  <div className="panel-heading-row">
+                    <div>
+                      <p className="eyebrow">Activation details</p>
+                      <h2>Add recording access.</h2>
+                    </div>
+                    <button className="button button-ghost" type="button" onClick={() => setDraftReviewMode('review')}>
+                      Back to review
+                    </button>
+                  </div>
+                  <div className="setup-suggestion">
+                    <strong>AI setup suggestion</strong>
+                    <p>{recorderSuggestion.summary}</p>
+                    <div className="claim-meta">
+                      {recorderSuggestion.selfRecommended ? <span>Self recorder suggested</span> : null}
+                      {recorderSuggestion.otherRecommended ? <span>Other recorder suggested</span> : null}
+                    </div>
+                  </div>
+                  <button className="button button-primary" type="button" onClick={() => void handleUseSelfRecorder()}>
+                    I will record myself
+                  </button>
+                  <form className="compact-form" onSubmit={handleInvite}>
+                    <label>
+                      Role
+                      <select name="role" defaultValue={recorderSuggestion.otherRecommended ? 'recorder' : 'witness'}>
+                        <option value="recorder">Recorder</option>
+                        <option value="witness">Witness</option>
+                      </select>
+                    </label>
+                    <FormField label="Invitee name" name="inviteeName" placeholder="optional name" />
+                    <FormField label="Recorder email/contact" name="inviteeContact" placeholder="email, phone, or handle" />
+                    <FormField label="Payout share bps" name="payoutShareBps" type="number" defaultValue="0" />
+                    <label>
+                      Responsibilities
+                      <textarea
+                        name="responsibilities"
+                        rows={3}
+                        defaultValue={recorderSuggestion.responsibilities}
+                        placeholder="What this recorder or proof source should capture..."
+                      />
+                    </label>
+                    <button className="button button-ghost" type="submit">Create invite link</button>
+                  </form>
+                  {inviteLink ? <p className="form-message selectable">{inviteLink}</p> : null}
+                  {setupMessage ? <p className="form-message">{setupMessage}</p> : null}
+                  <button
+                    className="button button-primary"
+                    type="button"
+                    onClick={() => void handleActivateClaim()}
+                    disabled={data.recorderInvites.length === 0}
+                  >
+                    Activate for backing
+                  </button>
+                  {data.recorderInvites.length > 0 ? <InviteList invites={data.recorderInvites} /> : null}
+                </section>
+              ) : (
+                <section className="mvp-panel draft-action-panel">
+                  <p className="eyebrow">Next action</p>
+                  <h2>What do you want to do with this draft?</h2>
+                  <div className="action-row">
+                    <button className="button button-primary" type="button" onClick={() => setDraftReviewMode('activate')}>
+                      Activate
+                    </button>
+                    <a className="button button-ghost" href="/">
+                      Save for later
+                    </a>
+                    <button className="button button-ghost" type="button" onClick={() => setDraftReviewMode('edit')}>
+                      Edit
+                    </button>
+                  </div>
+                  {setupMessage ? <p className="form-message">{setupMessage}</p> : null}
+                </section>
+              )}
+            </>
+          )}
+        </main>
+      </AppChrome>
+    );
+  }
 
   return (
     <AppChrome>
@@ -2049,9 +2291,9 @@ function ClaimDetailPage({ slug }: { slug: string }) {
           <aside className="mvp-panel">
             {isDraft ? (
               <>
-                <p className="eyebrow">Draft setup</p>
+                <p className="eyebrow">Draft</p>
                 <Metric label="Status" value="Setup incomplete" />
-                <Metric label="Recording access" value={data.recorderInvites.length > 0 ? 'Added' : 'Needed'} />
+                <Metric label="Recorder status" value={data.recorderInvites.length > 0 ? 'Added' : 'Needed'} />
                 <Metric label="Payment setup" value="Deferred until lock" />
                 <p className="form-message">
                   The claim is saved, but not public for backing yet. Add recording access, then activate it.
@@ -2103,7 +2345,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                   <option value="witness">Witness</option>
                 </select>
               </label>
-              <FormField label="Invitee name" name="inviteeName" placeholder="Alex" />
+              <FormField label="Invitee name" name="inviteeName" placeholder="optional name" />
               <FormField label="Recorder email/contact" name="inviteeContact" placeholder="email, phone, or handle" />
               <FormField label="Payout share bps" name="payoutShareBps" type="number" defaultValue={isDraft ? '0' : '1000'} />
               <label>
@@ -2669,4 +2911,36 @@ function formatMoney(cents: number) {
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(cents / 100);
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return 'Not set';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return 'Not set';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
+function toDateTimeLocalValue(value: string | null) {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 16);
 }
