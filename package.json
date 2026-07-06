@@ -16,6 +16,7 @@
     "@supabase/supabase-js": "^2.110.0",
     "livekit-client": "^2.20.0",
     "livekit-server-sdk": "^2.16.0",
-    "postgres": "^3.4.9"
+    "postgres": "^3.4.9",
+    "stripe": "^22.3.0"
   }
 }

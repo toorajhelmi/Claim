@@ -246,6 +246,23 @@ type SectionReviewState = {
   originalBeforeRewrite: string;
 };
 
+type ActivationWizardStep = 'setup' | 'review' | 'payment';
+
+type ActivationSetupState = {
+  selfRecording: boolean;
+  otherRecorder: boolean;
+  externalProof: boolean;
+  selfName: string;
+  selfContact: string;
+  recorderName: string;
+  recorderContact: string;
+  recorderResponsibilities: string;
+  payoutShareBps: string;
+  externalProofLabel: string;
+  externalProofDetails: string;
+  externalProofLink: string;
+};
+
 const reviewableStepLabels: Record<ReviewableStepKey, string> = {
   title: 'Claim',
   proofRules: 'Proof rules',
@@ -1951,8 +1968,9 @@ function inferRecorderSetup(claim: Claim, proofRules: ProofRule[]) {
   ]
     .join('\n')
     .toLowerCase();
-  const selfRecommended = /\b(my|my own|me|myself|gopro|go pro|phone|head view|screen share)\b/.test(proofText);
-  const otherRecommended = /\b(friend|partner|recorder|witness|second|another|full body|camera two|2 cameras)\b/.test(proofText);
+  const selfRecommended = /\b(my|my own|me|myself|gopro|go pro|phone|bodycam|head view|screen share|wearable|gps|tracker)\b/.test(proofText);
+  const otherRecommended = /\b(friend|partner|recorder|witness|second|another|full body|camera two|2 cameras|independent|public feed|venue|third-party|third party|external)\b/.test(proofText);
+  const externalRecommended = /\b(public feed|venue|third-party|third party|external|transcript|receipt|artifact|metadata|sensor|tracker|gps|public post)\b/.test(proofText);
   const responsibilities = otherRecommended
     ? 'Record the attempt as a second camera/witness, keep the claimer visible when possible, and help preserve timestamped evidence for AI-assisted verification.'
     : 'Record the live attempt, show the proof code at start, capture timestamped progress, and preserve saved evidence for AI-assisted verification.';
@@ -1965,21 +1983,58 @@ function inferRecorderSetup(claim: Claim, proofRules: ProofRule[]) {
   return {
     selfRecommended: selfRecommended || !otherRecommended,
     otherRecommended,
+    externalRecommended,
     responsibilities,
     summary,
   };
+}
+
+function createActivationSetupState(claim: Claim, recorderSuggestion: ReturnType<typeof inferRecorderSetup>): ActivationSetupState {
+  return {
+    selfRecording: recorderSuggestion.selfRecommended,
+    otherRecorder: recorderSuggestion.otherRecommended,
+    externalProof: recorderSuggestion.externalRecommended,
+    selfName: claim.creator_name,
+    selfContact: claim.contact_email ?? '',
+    recorderName: '',
+    recorderContact: '',
+    recorderResponsibilities: recorderSuggestion.responsibilities,
+    payoutShareBps: '0',
+    externalProofLabel: '',
+    externalProofDetails: '',
+    externalProofLink: '',
+  };
+}
+
+function buildActivationSetupSummary(setup: ActivationSetupState) {
+  return [
+    setup.selfRecording
+      ? `Claimer recorder: ${setup.selfName || 'claimer'}${setup.selfContact ? ` (${setup.selfContact})` : ''}.`
+      : '',
+    setup.otherRecorder
+      ? `Additional recorder: ${setup.recorderName || 'unnamed recorder'}${setup.recorderContact ? ` (${setup.recorderContact})` : ''}. Responsibilities: ${setup.recorderResponsibilities || 'not provided'}.`
+      : '',
+    setup.externalProof
+      ? `External proof source: ${setup.externalProofLabel || 'proof source'}. ${setup.externalProofDetails || ''} ${setup.externalProofLink || ''}`.trim()
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 function ClaimDetailPage({ slug }: { slug: string }) {
   const { data, loading, error, reload } = useClaimBundle(slug);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [pledgeMessage, setPledgeMessage] = useState('');
-  const [inviteLink, setInviteLink] = useState('');
   const [setupMessage, setSetupMessage] = useState('');
   const [draftMode, setDraftMode] = useState<'review' | 'activate' | 'edit'>(() => {
     const mode = new URLSearchParams(window.location.search).get('mode');
     return mode === 'activate' || mode === 'edit' ? mode : 'review';
   });
+  const [activationStep, setActivationStep] = useState<ActivationWizardStep>('setup');
+  const [activationSetup, setActivationSetup] = useState<ActivationSetupState | null>(null);
+  const [activationReviews, setActivationReviews] = useState<Array<[string, ClaimabilityReview]>>([]);
+  const [activationStatus, setActivationStatus] = useState<'idle' | 'reviewing' | 'checking-out' | 'verifying'>('idle');
 
   useEffect(() => {
     async function loadCurrentUser() {
@@ -1989,6 +2044,67 @@ function ClaimDetailPage({ slug }: { slug: string }) {
 
     void loadCurrentUser();
   }, []);
+
+  useEffect(() => {
+    if (!data?.claim || data.claim.status !== 'draft') {
+      return;
+    }
+
+    const suggestion = inferRecorderSetup(data.claim, data.proofRules);
+    setActivationSetup((currentSetup) => currentSetup ?? createActivationSetupState(data.claim, suggestion));
+  }, [data?.claim.id, data?.claim.status, data?.proofRules.length]);
+
+  useEffect(() => {
+    async function verifyCheckoutReturn() {
+      if (!data?.claim) return;
+
+      const params = new URLSearchParams(window.location.search);
+      const checkoutStatus = params.get('checkout');
+      const sessionId = params.get('session_id');
+
+      if (checkoutStatus === 'cancel') {
+        setDraftMode('activate');
+        setActivationStep('payment');
+        setSetupMessage('Payment was not completed. Try again when you are ready.');
+        window.history.replaceState(null, '', `/claims/${slug}?mode=activate`);
+        return;
+      }
+
+      if (checkoutStatus !== 'success' || !sessionId) {
+        return;
+      }
+
+      setDraftMode('activate');
+      setActivationStep('payment');
+      setActivationStatus('verifying');
+      setSetupMessage('Confirming payment and activating claim...');
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const response = await fetch('/api/verify-activation-payment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionData.session?.access_token ? { Authorization: `Bearer ${sessionData.session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ sessionId }),
+      });
+      const body = (await response.json().catch(() => null)) as { error?: string; ok?: boolean } | null;
+
+      setActivationStatus('idle');
+
+      if (!response.ok || !body?.ok) {
+        setSetupMessage(body?.error ?? 'Payment could not be verified. Please retry activation.');
+        window.history.replaceState(null, '', `/claims/${slug}?mode=activate`);
+        return;
+      }
+
+      setSetupMessage('Payment confirmed. Claim activated and recorder emails sent.');
+      window.history.replaceState(null, '', `/claims/${slug}`);
+      await reload();
+    }
+
+    void verifyCheckoutReturn();
+  }, [data?.claim.id, slug]);
 
   async function handlePledge(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2009,73 +2125,9 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     }
   }
 
-  async function handleInvite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!data) return;
-    const formData = new FormData(event.currentTarget);
-    const { data: invite, error: inviteError } = await supabase
-      .from('claim_recorder_invites')
-      .insert({
-        claim_id: data.claim.id,
-        role: String(formData.get('role') || 'recorder'),
-        invitee_name: nullableString(formData.get('inviteeName')),
-        invitee_contact: nullableString(formData.get('inviteeContact')),
-        payout_share_bps: Number(formData.get('payoutShareBps') || 0),
-        responsibilities: nullableString(formData.get('responsibilities')),
-      })
-      .select('invite_token')
-      .single();
-    setInviteLink(inviteError ? inviteError.message : `${window.location.origin}/recorder/invite/${invite.invite_token}`);
-    if (!inviteError) await reload();
-  }
-
-  async function handleUseSelfRecorder() {
-    if (!data) return;
-
-    const hasSelfRecorder = data.recorderInvites.some(
-      (invite) => invite.invitee_contact === data.claim.contact_email && invite.status !== 'declined',
-    );
-
-    if (hasSelfRecorder) {
-      setSetupMessage('Self recording access is already added.');
-      return;
-    }
-
-    const { error: insertError } = await supabase.from('claim_recorder_invites').insert({
-      claim_id: data.claim.id,
-      role: 'recorder',
-      invitee_name: data.claim.creator_name,
-      invitee_contact: data.claim.contact_email,
-      payout_share_bps: 0,
-      responsibilities: 'Claimer will record their own live proof and receive recording access.',
-      status: 'accepted',
-    });
-
-    setSetupMessage(insertError ? insertError.message : 'Self recording access added.');
-    if (!insertError) await reload();
-  }
-
-  async function handleActivateClaim() {
-    if (!data) return;
-
-    if (data.recorderInvites.length === 0) {
-      setSetupMessage('Add recording access before activating.');
-      return;
-    }
-
-    const { error: updateError } = await supabase
-      .from('claims')
-      .update({ status: 'open_for_backing' })
-      .eq('id', data.claim.id);
-
-    setSetupMessage(updateError ? updateError.message : 'Claim activated. Supporters can now back it.');
-    if (!updateError) await reload();
-  }
-
   function setDraftReviewMode(nextMode: 'review' | 'activate' | 'edit') {
     setDraftMode(nextMode);
     setSetupMessage('');
-    setInviteLink('');
     const nextUrl = nextMode === 'review' ? `/claims/${slug}` : `/claims/${slug}?mode=${nextMode}`;
     window.history.replaceState(null, '', nextUrl);
   }
@@ -2182,12 +2234,434 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     setSetupMessage(insertError.message);
   }
 
+  function updateActivationSetup(nextState: Partial<ActivationSetupState>) {
+    setActivationSetup((currentSetup) => (currentSetup ? { ...currentSetup, ...nextState } : currentSetup));
+    setActivationReviews([]);
+    setSetupMessage('');
+  }
+
+  function validateActivationSetup(recorderSuggestion: ReturnType<typeof inferRecorderSetup>) {
+    if (!activationSetup) {
+      return 'Activation setup is still loading.';
+    }
+
+    if (!activationSetup.selfRecording && !activationSetup.otherRecorder && !activationSetup.externalProof) {
+      return 'Enable at least one proof setup option before review.';
+    }
+
+    if (recorderSuggestion.selfRecommended && !activationSetup.selfRecording) {
+      return 'Self recording is required by the current reviewed claim. Use Edit if you want to remove it.';
+    }
+
+    if (recorderSuggestion.otherRecommended && !activationSetup.otherRecorder) {
+      return 'An additional recorder/source is required by the current reviewed claim. Use Edit if you want to remove it.';
+    }
+
+    if (recorderSuggestion.externalRecommended && !activationSetup.externalProof) {
+      return 'An external proof source is required by the current reviewed claim. Use Edit if you want to remove it.';
+    }
+
+    if (activationSetup.selfRecording && (!activationSetup.selfName.trim() || !activationSetup.selfContact.trim())) {
+      return 'Add your recorder name and contact.';
+    }
+
+    if (
+      activationSetup.otherRecorder &&
+      (!activationSetup.recorderName.trim() ||
+        !activationSetup.recorderContact.trim() ||
+        !activationSetup.recorderResponsibilities.trim())
+    ) {
+      return 'Add the recorder name, contact, and responsibilities.';
+    }
+
+    if (
+      activationSetup.externalProof &&
+      (!activationSetup.externalProofLabel.trim() || !activationSetup.externalProofDetails.trim())
+    ) {
+      return 'Add the external proof source name and what it will preserve.';
+    }
+
+    return '';
+  }
+
+  async function handleReviewActivationSetup(recorderSuggestion: ReturnType<typeof inferRecorderSetup>) {
+    if (!data || !activationSetup) return;
+
+    const validationMessage = validateActivationSetup(recorderSuggestion);
+
+    if (validationMessage) {
+      setSetupMessage(validationMessage);
+      return;
+    }
+
+    setActivationStatus('reviewing');
+    setSetupMessage('Reviewing activation setup...');
+
+    try {
+      const proofRules = data.proofRules.map((rule) => rule.rule).join('\n');
+      const liveSetupWithActivation = [
+        data.claim.event_context ?? '',
+        buildActivationSetupSummary(activationSetup),
+      ]
+        .filter(Boolean)
+        .join('\n');
+      const reviews: Array<[string, ClaimabilityReview]> = [
+        ['Claim', await requestSectionReview('title', data.claim.title)],
+        ['Proof rules', await requestSectionReview('proofRules', proofRules)],
+        ['Activation proof setup', await requestSectionReview('liveSetup', liveSetupWithActivation)],
+      ];
+      const failedReview = reviews.find(([, review]) => !review.claimable);
+
+      setActivationReviews(reviews);
+      setActivationStep('review');
+      setSetupMessage(
+        failedReview
+          ? `${failedReview[0]} needs tightening before activation. Use Edit to change reviewed claim details.`
+          : 'Activation setup passed review. Continue to payment when ready.',
+      );
+    } catch (reviewError) {
+      setSetupMessage(reviewError instanceof Error ? reviewError.message : 'Could not review activation setup.');
+    } finally {
+      setActivationStatus('idle');
+    }
+  }
+
+  async function handleStartActivationPayment(recorderSuggestion: ReturnType<typeof inferRecorderSetup>) {
+    if (!data || !activationSetup) return;
+
+    const validationMessage = validateActivationSetup(recorderSuggestion);
+
+    if (validationMessage) {
+      setSetupMessage(validationMessage);
+      setActivationStep('setup');
+      return;
+    }
+
+    setActivationStatus('checking-out');
+    setSetupMessage('Starting secure payment...');
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const response = await fetch('/api/create-activation-checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sessionData.session?.access_token ? { Authorization: `Bearer ${sessionData.session.access_token}` } : {}),
+      },
+      body: JSON.stringify({
+        claimId: data.claim.id,
+        setup: activationSetup,
+      }),
+    });
+    const body = (await response.json().catch(() => null)) as { error?: string; url?: string } | null;
+
+    setActivationStatus('idle');
+
+    if (!response.ok || !body?.url) {
+      setSetupMessage(body?.error ?? 'Could not start payment. Please retry.');
+      return;
+    }
+
+    window.location.href = body.url;
+  }
+
   if (loading) return <LoadingPage label="Loading claim..." />;
   if (error || !data) return <ErrorPage message={error ?? 'Claim not found.'} />;
 
   const isDraft = data.claim.status === 'draft';
   const isOwner = currentUserId === data.claim.creator_id;
   const recorderSuggestion = inferRecorderSetup(data.claim, data.proofRules);
+
+  if (isDraft && isOwner && draftMode === 'activate') {
+    const setup = activationSetup ?? createActivationSetupState(data.claim, recorderSuggestion);
+    const allActivationReviewsPassed =
+      activationReviews.length > 0 && activationReviews.every(([, review]) => review.claimable);
+
+    return (
+      <AppChrome>
+        <main className="app-page section-shell">
+          <section className="draft-review-hero activation-hero">
+            <p className="eyebrow">Activate claim</p>
+            <h1>Complete activation.</h1>
+            <p>
+              Confirm the pending proof setup, run one final review, then pay to open the claim for backing.
+            </p>
+          </section>
+
+          <section className="mvp-panel activation-wizard">
+            <div className="activation-steps" aria-label="Activation progress">
+              {(['setup', 'review', 'payment'] as ActivationWizardStep[]).map((step, index) => (
+                <button
+                  className={activationStep === step ? 'selected' : ''}
+                  type="button"
+                  key={step}
+                  onClick={() => setActivationStep(step)}
+                  disabled={step === 'payment' && !allActivationReviewsPassed}
+                >
+                  <span>{index + 1}</span>
+                  {step}
+                </button>
+              ))}
+            </div>
+
+            {activationStep === 'setup' ? (
+              <div className="activation-step-panel">
+                <div className="panel-heading-row">
+                  <div>
+                    <p className="eyebrow">Pending setup</p>
+                    <h2>Select proof support.</h2>
+                  </div>
+                  <button className="button button-ghost" type="button" onClick={() => setDraftReviewMode('review')}>
+                    Back to draft
+                  </button>
+                </div>
+                <p className="form-message">
+                  Required setup items are locked because the reviewed claim depends on them. To remove a required item,
+                  use Edit so the claim goes through review again. Optional items only augment the proof setup.
+                </p>
+
+                <div className="setup-option-grid">
+                  <button
+                    className={`setup-option ${setup.selfRecording ? 'selected' : ''}`}
+                    type="button"
+                    onClick={() => {
+                      if (!recorderSuggestion.selfRecommended) {
+                        updateActivationSetup({ selfRecording: !setup.selfRecording });
+                      }
+                    }}
+                    aria-pressed={setup.selfRecording}
+                  >
+                    <span>{setup.selfRecording ? 'Enabled' : 'Disabled'}</span>
+                    <strong>Claimer records</strong>
+                    <p>You or your device captures part of the proof.</p>
+                    {recorderSuggestion.selfRecommended ? <small>Required by current claim</small> : <small>Optional add-on</small>}
+                  </button>
+
+                  <button
+                    className={`setup-option ${setup.otherRecorder ? 'selected' : ''}`}
+                    type="button"
+                    onClick={() => {
+                      if (!recorderSuggestion.otherRecommended) {
+                        updateActivationSetup({ otherRecorder: !setup.otherRecorder });
+                      }
+                    }}
+                    aria-pressed={setup.otherRecorder}
+                  >
+                    <span>{setup.otherRecorder ? 'Enabled' : 'Disabled'}</span>
+                    <strong>Additional recorder</strong>
+                    <p>Another person or second source supports the proof.</p>
+                    {recorderSuggestion.otherRecommended ? <small>Required by current claim</small> : <small>Optional add-on</small>}
+                  </button>
+
+                  <button
+                    className={`setup-option ${setup.externalProof ? 'selected' : ''}`}
+                    type="button"
+                    onClick={() => {
+                      if (!recorderSuggestion.externalRecommended) {
+                        updateActivationSetup({ externalProof: !setup.externalProof });
+                      }
+                    }}
+                    aria-pressed={setup.externalProof}
+                  >
+                    <span>{setup.externalProof ? 'Enabled' : 'Disabled'}</span>
+                    <strong>External proof source</strong>
+                    <p>Public feed, GPS/sensor export, transcript, or artifact remains reviewable.</p>
+                    {recorderSuggestion.externalRecommended ? <small>Required by current claim</small> : <small>Optional add-on</small>}
+                  </button>
+                </div>
+
+                <div className="activation-fields">
+                  {setup.selfRecording ? (
+                    <div className="setup-fields-card">
+                      <p className="eyebrow">Your recorder info</p>
+                      <div className="form-grid">
+                        <label>
+                          Recorder name
+                          <input
+                            value={setup.selfName}
+                            onChange={(event) => updateActivationSetup({ selfName: event.target.value })}
+                            placeholder="Your name"
+                          />
+                        </label>
+                        <label>
+                          Contact
+                          <input
+                            value={setup.selfContact}
+                            onChange={(event) => updateActivationSetup({ selfContact: event.target.value })}
+                            placeholder="email, phone, or handle"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {setup.otherRecorder ? (
+                    <div className="setup-fields-card">
+                      <p className="eyebrow">Recorder info</p>
+                      <div className="form-grid">
+                        <label>
+                          Recorder name
+                          <input
+                            value={setup.recorderName}
+                            onChange={(event) => updateActivationSetup({ recorderName: event.target.value })}
+                            placeholder="Recorder name"
+                          />
+                        </label>
+                        <label>
+                          Recorder email/contact
+                          <input
+                            value={setup.recorderContact}
+                            onChange={(event) => updateActivationSetup({ recorderContact: event.target.value })}
+                            placeholder="email, phone, or handle"
+                          />
+                        </label>
+                        <label>
+                          Payout share bps
+                          <input
+                            value={setup.payoutShareBps}
+                            type="number"
+                            onChange={(event) => updateActivationSetup({ payoutShareBps: event.target.value })}
+                            placeholder="0"
+                          />
+                        </label>
+                      </div>
+                      <label>
+                        Responsibilities
+                        <textarea
+                          value={setup.recorderResponsibilities}
+                          rows={3}
+                          onChange={(event) => updateActivationSetup({ recorderResponsibilities: event.target.value })}
+                          placeholder="What this recorder or source must capture..."
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+
+                  {setup.externalProof ? (
+                    <div className="setup-fields-card">
+                      <p className="eyebrow">External proof source</p>
+                      <div className="form-grid">
+                        <label>
+                          Source name
+                          <input
+                            value={setup.externalProofLabel}
+                            onChange={(event) => updateActivationSetup({ externalProofLabel: event.target.value })}
+                            placeholder="GPS app, public feed, transcript, venue feed..."
+                          />
+                        </label>
+                        <label>
+                          Optional link/contact
+                          <input
+                            value={setup.externalProofLink}
+                            onChange={(event) => updateActivationSetup({ externalProofLink: event.target.value })}
+                            placeholder="URL, account, or contact"
+                          />
+                        </label>
+                      </div>
+                      <label>
+                        What will be preserved?
+                        <textarea
+                          value={setup.externalProofDetails}
+                          rows={3}
+                          onChange={(event) => updateActivationSetup({ externalProofDetails: event.target.value })}
+                          placeholder="Describe the saved artifact, metadata, transcript, log, or public proof feed."
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="action-row">
+                  <button
+                    className="button button-primary"
+                    type="button"
+                    onClick={() => void handleReviewActivationSetup(recorderSuggestion)}
+                    disabled={activationStatus === 'reviewing'}
+                  >
+                    {activationStatus === 'reviewing' ? 'Reviewing...' : 'Review setup'}
+                  </button>
+                  <button className="button button-ghost" type="button" onClick={() => setDraftReviewMode('review')}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {activationStep === 'review' ? (
+              <div className="activation-step-panel">
+                <div className="panel-heading-row">
+                  <div>
+                    <p className="eyebrow">Final AI review</p>
+                    <h2>Review activation readiness.</h2>
+                  </div>
+                  <button className="button button-ghost" type="button" onClick={() => setActivationStep('setup')}>
+                    Back to setup
+                  </button>
+                </div>
+                {activationReviews.length > 0 ? (
+                  <div className="claimability-checks activation-review-list">
+                    {activationReviews.map(([label, review]) => (
+                      <div className={review.claimable ? 'passed' : 'failed'} key={label}>
+                        <span>{review.claimable ? 'Pass' : 'Fix'}</span>
+                        <strong>{label}</strong>
+                        <p>{review.summary}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="form-message">Run setup review first.</p>
+                )}
+                <div className="action-row">
+                  {allActivationReviewsPassed ? (
+                    <button className="button button-primary" type="button" onClick={() => setActivationStep('payment')}>
+                      Continue to payment
+                    </button>
+                  ) : (
+                    <button className="button button-primary" type="button" onClick={() => setDraftReviewMode('edit')}>
+                      Edit claim
+                    </button>
+                  )}
+                  <button className="button button-ghost" type="button" onClick={() => void handleReviewActivationSetup(recorderSuggestion)}>
+                    Re-run review
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {activationStep === 'payment' ? (
+              <div className="activation-step-panel">
+                <p className="eyebrow">Payment</p>
+                <h2>Pay to activate.</h2>
+                <p className="form-message">
+                  We will open a secure Stripe checkout. If the charge does not go through, return here and retry.
+                  Once payment is confirmed, the claim opens for backing and recorder emails are sent.
+                </p>
+                <Metric label="Activation charge" value={formatMoney(data.claim.stake_amount_cents)} />
+                <div className="action-row">
+                  <button
+                    className="button button-primary"
+                    type="button"
+                    onClick={() => void handleStartActivationPayment(recorderSuggestion)}
+                    disabled={activationStatus === 'checking-out' || activationStatus === 'verifying'}
+                  >
+                    {activationStatus === 'checking-out'
+                      ? 'Opening checkout...'
+                      : activationStatus === 'verifying'
+                        ? 'Verifying payment...'
+                        : 'Pay and activate'}
+                  </button>
+                  <button className="button button-ghost" type="button" onClick={() => setActivationStep('review')}>
+                    Back to review
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {setupMessage ? <p className="form-message">{setupMessage}</p> : null}
+          </section>
+        </main>
+      </AppChrome>
+    );
+  }
 
   if (isDraft && isOwner) {
     return (
@@ -2198,7 +2672,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
             <h1>Review before activation.</h1>
             <p>
               Check the claim preview and proof details. You can activate to add recorder and launch
-              details, save it for later, or edit the draft.
+              details, or edit the draft if the claim itself needs changes.
             </p>
           </section>
 
@@ -2267,77 +2741,19 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                 </aside>
               </div>
 
-              {draftMode === 'activate' ? (
-                <section className="mvp-panel">
-                  <div className="panel-heading-row">
-                    <div>
-                      <p className="eyebrow">Activation details</p>
-                      <h2>Add recording access.</h2>
-                    </div>
-                    <button className="button button-ghost" type="button" onClick={() => setDraftReviewMode('review')}>
-                      Back to review
-                    </button>
-                  </div>
-                  <div className="setup-suggestion">
-                    <strong>AI setup suggestion</strong>
-                    <p>{recorderSuggestion.summary}</p>
-                    <div className="claim-meta">
-                      {recorderSuggestion.selfRecommended ? <span>Self recorder suggested</span> : null}
-                      {recorderSuggestion.otherRecommended ? <span>Other recorder suggested</span> : null}
-                    </div>
-                  </div>
-                  <button className="button button-primary" type="button" onClick={() => void handleUseSelfRecorder()}>
-                    I will record myself
+              <section className="mvp-panel draft-action-panel">
+                <p className="eyebrow">Next action</p>
+                <h2>What do you want to do with this draft?</h2>
+                <div className="action-row">
+                  <button className="button button-primary" type="button" onClick={() => setDraftReviewMode('activate')}>
+                    Activate
                   </button>
-                  <form className="compact-form" onSubmit={handleInvite}>
-                    <label>
-                      Role
-                      <select name="role" defaultValue={recorderSuggestion.otherRecommended ? 'recorder' : 'witness'}>
-                        <option value="recorder">Recorder</option>
-                        <option value="witness">Witness</option>
-                      </select>
-                    </label>
-                    <FormField label="Invitee name" name="inviteeName" placeholder="optional name" />
-                    <FormField label="Recorder email/contact" name="inviteeContact" placeholder="email, phone, or handle" />
-                    <FormField label="Payout share bps" name="payoutShareBps" type="number" defaultValue="0" />
-                    <label>
-                      Responsibilities
-                      <textarea
-                        name="responsibilities"
-                        rows={3}
-                        defaultValue={recorderSuggestion.responsibilities}
-                        placeholder="What this recorder or proof source should capture..."
-                      />
-                    </label>
-                    <button className="button button-ghost" type="submit">Create invite link</button>
-                  </form>
-                  {inviteLink ? <p className="form-message selectable">{inviteLink}</p> : null}
-                  {setupMessage ? <p className="form-message">{setupMessage}</p> : null}
-                  <button
-                    className="button button-primary"
-                    type="button"
-                    onClick={() => void handleActivateClaim()}
-                    disabled={data.recorderInvites.length === 0}
-                  >
-                    Activate for backing
+                  <button className="button button-ghost" type="button" onClick={() => setDraftReviewMode('edit')}>
+                    Edit
                   </button>
-                  {data.recorderInvites.length > 0 ? <InviteList invites={data.recorderInvites} /> : null}
-                </section>
-              ) : (
-                <section className="mvp-panel draft-action-panel">
-                  <p className="eyebrow">Next action</p>
-                  <h2>What do you want to do with this draft?</h2>
-                  <div className="action-row">
-                    <button className="button button-primary" type="button" onClick={() => setDraftReviewMode('activate')}>
-                      Activate
-                    </button>
-                    <button className="button button-ghost" type="button" onClick={() => setDraftReviewMode('edit')}>
-                      Edit
-                    </button>
-                  </div>
-                  {setupMessage ? <p className="form-message">{setupMessage}</p> : null}
-                </section>
-              )}
+                </div>
+                {setupMessage ? <p className="form-message">{setupMessage}</p> : null}
+              </section>
             </>
           )}
         </main>
@@ -2395,82 +2811,14 @@ function ClaimDetailPage({ slug }: { slug: string }) {
           </aside>
         </div>
 
-        <div className="mvp-layout">
-          <section className="mvp-panel">
-            <p className="eyebrow">Recording access</p>
-            {isDraft && isOwner ? (
-              <div className="setup-suggestion">
-                <strong>AI setup suggestion</strong>
-                <p>{recorderSuggestion.summary}</p>
-                <div className="claim-meta">
-                  {recorderSuggestion.selfRecommended ? <span>Self recorder suggested</span> : null}
-                  {recorderSuggestion.otherRecommended ? <span>Other recorder suggested</span> : null}
-                </div>
-              </div>
-            ) : null}
-            {isDraft && isOwner ? (
-              <button className="button button-primary" type="button" onClick={() => void handleUseSelfRecorder()}>
-                I will record myself
-              </button>
-            ) : null}
-            <form className="compact-form" onSubmit={handleInvite}>
-              <label>
-                Role
-                <select name="role" defaultValue={recorderSuggestion.otherRecommended ? 'recorder' : 'witness'}>
-                  <option value="recorder">Recorder</option>
-                  <option value="witness">Witness</option>
-                </select>
-              </label>
-              <FormField label="Invitee name" name="inviteeName" placeholder="optional name" />
-              <FormField label="Recorder email/contact" name="inviteeContact" placeholder="email, phone, or handle" />
-              <FormField label="Payout share bps" name="payoutShareBps" type="number" defaultValue={isDraft ? '0' : '1000'} />
-              <label>
-                Responsibilities
-                <textarea name="responsibilities" rows={3} defaultValue={recorderSuggestion.responsibilities} placeholder="Second camera, confirm check-ins, add notes..." />
-              </label>
-              <button className="button button-ghost" type="submit">Create invite link</button>
-            </form>
-            {inviteLink ? <p className="form-message selectable">{inviteLink}</p> : null}
-            {setupMessage ? <p className="form-message">{setupMessage}</p> : null}
-          </section>
-
-          <section className="mvp-panel">
-            <p className="eyebrow">{isDraft ? 'Activate claim' : 'Next steps'}</p>
-            {isDraft && isOwner ? (
-              <>
-                <div className="rule-list">
-                  <div className="rule-item">
-                    <span>1</span>
-                    <p>Claim, proof, and live setup saved.</p>
-                  </div>
-                  <div className="rule-item">
-                    <span>2</span>
-                    <p>{data.recorderInvites.length > 0 ? 'Recording access added.' : 'Add yourself or another recorder.'}</p>
-                  </div>
-                  <div className="rule-item">
-                    <span>3</span>
-                    <p>Payment and lock flow can be completed after the draft is active.</p>
-                  </div>
-                </div>
-                <button
-                  className="button button-primary"
-                  type="button"
-                  onClick={() => void handleActivateClaim()}
-                  disabled={data.recorderInvites.length === 0}
-                >
-                  Activate for backing
-                </button>
-              </>
-            ) : (
-              <div className="action-grid">
-                <a className="button button-primary" href={`/claims/${data.claim.slug}/live`}>Open live room</a>
-                <a className="button button-ghost" href={`/claims/${data.claim.slug}/result`}>View result page</a>
-              </div>
-            )}
-            <SupporterWall pledges={data.pledges} />
-            <InviteList invites={data.recorderInvites} />
-          </section>
-        </div>
+        <section className="mvp-panel">
+          <p className="eyebrow">Next steps</p>
+          <div className="action-grid">
+            <a className="button button-primary" href={`/claims/${data.claim.slug}/live`}>Open live room</a>
+            <a className="button button-ghost" href={`/claims/${data.claim.slug}/result`}>View result page</a>
+          </div>
+          <SupporterWall pledges={data.pledges} />
+        </section>
       </main>
     </AppChrome>
   );
