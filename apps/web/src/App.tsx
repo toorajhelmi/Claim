@@ -242,6 +242,7 @@ type SectionReviewState = {
   lastReviewed: string;
   rewriteStatus: RewriteStatus;
   lastRewrite: string;
+  originalBeforeRewrite: string;
 };
 
 const reviewableStepLabels: Record<ReviewableStepKey, string> = {
@@ -264,6 +265,7 @@ function createInitialSectionReviewState(): Record<ReviewableStepKey, SectionRev
       lastReviewed: '',
       rewriteStatus: 'idle',
       lastRewrite: '',
+      originalBeforeRewrite: '',
     },
     proofRules: {
       review: null,
@@ -271,6 +273,7 @@ function createInitialSectionReviewState(): Record<ReviewableStepKey, SectionRev
       lastReviewed: '',
       rewriteStatus: 'idle',
       lastRewrite: '',
+      originalBeforeRewrite: '',
     },
     liveSetup: {
       review: null,
@@ -278,6 +281,7 @@ function createInitialSectionReviewState(): Record<ReviewableStepKey, SectionRev
       lastReviewed: '',
       rewriteStatus: 'idle',
       lastRewrite: '',
+      originalBeforeRewrite: '',
     },
   };
 }
@@ -1208,7 +1212,30 @@ function CreateClaimPage() {
       lastReviewed: '',
       rewriteStatus: 'idle',
       lastRewrite: '',
+      originalBeforeRewrite: '',
     });
+  }
+
+  function undoSectionRewrite(section: ReviewableStepKey) {
+    const originalValue = sectionReviews[section].originalBeforeRewrite;
+
+    if (!originalValue) {
+      return;
+    }
+
+    setValues((currentValues) => ({
+      ...currentValues,
+      [section]: originalValue,
+    }));
+    updateSectionReview(section, {
+      review: null,
+      status: 'idle',
+      lastReviewed: '',
+      rewriteStatus: 'idle',
+      lastRewrite: '',
+      originalBeforeRewrite: '',
+    });
+    setMessage(`${reviewableStepLabels[section]} restored to the text before rewrite.`);
   }
 
   async function reviewSectionValue(section: ReviewableStepKey, claim: string) {
@@ -1301,7 +1328,10 @@ function CreateClaimPage() {
       ...currentValues,
       [section]: rewrittenClaim,
     }));
-    updateSectionReview(section, { lastRewrite: rewrittenClaim });
+    updateSectionReview(section, {
+      lastRewrite: rewrittenClaim,
+      originalBeforeRewrite: claim,
+    });
 
     try {
       const review = await reviewSectionValue(section, rewrittenClaim);
@@ -1479,6 +1509,11 @@ function CreateClaimPage() {
                 <div className="rewrite-applied">
                   <span>Applied rewritten {reviewableStepLabels[currentReviewKey].toLowerCase()}</span>
                   <p>{currentReviewState.lastRewrite}</p>
+                  {currentReviewState.originalBeforeRewrite ? (
+                    <button className="text-button" type="button" onClick={() => undoSectionRewrite(currentReviewKey)}>
+                      Undo rewrite
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
               {currentReviewKey && currentReviewState ? (

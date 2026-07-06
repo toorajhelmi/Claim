@@ -1547,6 +1547,10 @@ h3 {
   line-height: 1.5;
 }
 
+.rewrite-applied .text-button {
+  margin-top: 0.15rem;
+}
+
 .claimability-panel {
   display: grid;
   gap: 0.9rem;
