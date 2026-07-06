@@ -211,9 +211,9 @@ function runProofRulesRubric(content) {
   const lines = normalized.split(/\n+/).map((line) => line.trim()).filter(Boolean);
   const hasMultipleRules = lines.length >= 2 || normalized.length >= 140;
   const hasLiveStart = hasAny(lower, ['live', 'stream', 'proof code', 'start', 'before', 'window']);
-  const hasDurableEvidence = hasAny(lower, ['record', 'recording', 'video', 'clip', 'gps', 'timestamp', 'saved', 'link', 'photo']);
-  const hasObjectiveOutcome = hasAny(lower, ['gps', 'location', 'distance', 'finish', 'reach', 'timestamp', 'measured', 'visible', 'check']);
-  const hasIndependentReview = hasAny(lower, ['witness', 'recorder', 'friend', 'partner', 'review', 'verify', 'independently', 'public']);
+  const hasDurableEvidence = hasAny(lower, ['record', 'recording', 'video', 'clip', 'gps', 'timestamp', 'saved', 'link', 'photo', 'metadata', 'transcript']);
+  const hasObjectiveOutcome = hasAny(lower, ['gps', 'location', 'distance', 'finish', 'reach', 'timestamp', 'measured', 'visible', 'check', 'metadata']);
+  const hasIndependentReview = hasAny(lower, ['ai', 'witness', 'recorder', 'friend', 'partner', 'review', 'verify', 'independently', 'public']);
 
   const criteria = [
     scoreCriterion(
@@ -241,7 +241,7 @@ function runProofRulesRubric(content) {
       hasDurableEvidence
         ? 'The proof can leave saved evidence after the live attempt.'
         : 'The rules do not clearly say what saved evidence remains after the event.',
-      'Mention recorded video, GPS page, timestamped clips, saved stream, photo evidence, or evidence links.',
+      'Mention recorded video, GPS page, metadata, timestamped clips, saved stream, photo evidence, transcript, or evidence links.',
     ),
     scoreCriterion(
       'Objective outcome',
@@ -259,7 +259,7 @@ function runProofRulesRubric(content) {
       hasIndependentReview
         ? 'There is a path for another person or public artifact to support review.'
         : 'A reviewer may still have to trust only the claimer.',
-      'Add a witness, recorder, public artifact, independent check, or reviewer-verifiable source.',
+      'Add AI-reviewable evidence, a witness, recorder, public artifact, independent check, or reviewer-verifiable source.',
     ),
   ];
 
@@ -272,7 +272,7 @@ function runLiveSetupRubric(content) {
   const hasCaptureDevice = hasAny(lower, ['phone', 'camera', 'gopro', 'go pro', 'screen', 'stream', 'live', 'mic', 'audio']);
   const hasCoverage = hasAny(lower, ['head view', 'body view', 'full body', 'route', 'location', 'gps', 'angle', 'view', 'screen share']);
   const hasSecondSource = hasAny(lower, ['friend', 'recorder', 'witness', 'second', 'another', 'support', 'camera two', '2 cameras']);
-  const hasRecordingPlan = hasAny(lower, ['record', 'recording', 'saved', 'clip', 'upload', 'link', 'archive', 'stream']);
+  const hasRecordingPlan = hasAny(lower, ['record', 'recording', 'saved', 'clip', 'upload', 'link', 'archive', 'stream', 'metadata', 'transcript']);
   const hasContinuity = hasAny(lower, ['throughout', 'continuous', 'check-in', 'check in', 'timestamp', 'proof code', 'start', 'finish', 'uncut']);
 
   const criteria = [
@@ -310,7 +310,7 @@ function runLiveSetupRubric(content) {
       hasRecordingPlan
         ? 'The setup can leave saved evidence after the live event.'
         : 'The setup does not yet say what recording remains after the live event.',
-      'Mention saved recording, clip, stream archive, upload, or evidence link.',
+      'Mention saved recording, clip, stream archive, upload, metadata, transcript, or evidence link.',
     ),
     scoreCriterion(
       'Continuity',
@@ -418,7 +418,7 @@ function getValidatorMessages(claim, section) {
     {
       role: 'system',
       content:
-        `You review Claimroom ${sectionLabel}. Return strict JSON with claimable boolean, score 0-100, verdict, summary, criteria array, suggestions array. Each criteria item must have name, passed, reason, suggestion. A Claimroom setup is claimable only if it is specific, durable, provable, and constrained to the claim window. For proof rules and live setup, focus on evidence quality, saved artifacts, reviewer confidence, live-start integrity, and whether the outcome can be independently checked. Reject vague wording that requires trusting the claimer without live, timestamped, recorded, GPS, witness, public, or independently checkable evidence.`,
+        `You review Claimroom ${sectionLabel} for an AI-assisted verification platform. Return strict JSON with claimable boolean, score 0-100, verdict, summary, criteria array, suggestions array. Each criteria item must have name, passed, reason, suggestion. A Claimroom setup is claimable only if it is specific, durable, provable, and constrained to the claim window. For proof rules and live setup, focus on evidence quality, saved artifacts, AI-verifier confidence, live-start integrity, metadata/timestamps/GPS/transcripts where useful, and whether the outcome can be independently checked. Reject vague wording that requires trusting the claimer without live, timestamped, recorded, GPS, metadata, witness, public, AI-reviewable, or independently checkable evidence.`,
     },
     {
       role: 'user',

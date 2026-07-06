@@ -139,14 +139,14 @@ function strengthenProofRulesRewrite(content) {
     nextLines,
     nextText,
     ['saved', 'archive', 'link', 'clip', 'recording remains'],
-    'Saved video, clips, public artifacts, or evidence links must remain available for review.',
+    'Saved video, clips, public artifacts, GPS data, metadata, or evidence links must remain available for AI-assisted review.',
   );
   nextText = nextLines.join('\n');
   nextLines = appendLineIfMissing(
     nextLines,
     nextText,
-    ['reviewer', 'verify', 'independently', 'check'],
-    'The recorded evidence must let a reviewer independently check the claimed outcome.',
+    ['ai', 'reviewer', 'verify', 'independently', 'check'],
+    'The recorded evidence must let an AI verifier and reviewer independently check the claimed outcome.',
   );
 
   return nextLines.join('\n');
@@ -182,7 +182,7 @@ function strengthenLiveSetupRewrite(content) {
     nextLines,
     nextText,
     ['saved', 'archive', 'link', 'clip', 'recording remains'],
-    'Saved recordings, clips, or evidence links will remain available for review.',
+    'Saved recordings, clips, GPS or device metadata, and evidence links will remain available for AI-assisted review.',
   );
 
   return nextLines.join('\n');
@@ -205,7 +205,7 @@ function fallbackRewrite(claim, section) {
     return {
       rewrittenClaim: strengthenProofRulesRewrite(cleanInput(claim)),
       explanation:
-        'Added claim-window integrity, timestamped progress evidence, and saved reviewable proof.',
+        'Added claim-window integrity, timestamped progress evidence, and saved AI-reviewable proof.',
       source: 'rubric',
     };
   }
@@ -214,7 +214,7 @@ function fallbackRewrite(claim, section) {
     return {
       rewrittenClaim: strengthenLiveSetupRewrite(cleanInput(claim)),
       explanation:
-        'Added stream-start proof, continuity, and saved evidence for review.',
+        'Added stream-start proof, continuity, and saved AI-reviewable evidence.',
       source: 'rubric',
     };
   }
@@ -222,23 +222,23 @@ function fallbackRewrite(claim, section) {
   const futureClaim = normalizeFutureClaim(claim);
 
   return {
-    rewrittenClaim: `${futureClaim} within the declared claim window, starting only after a live proof code is shown on stream, with timestamped video check-ins and an uncut finish clip that proves the outcome.`,
+    rewrittenClaim: `${futureClaim} within the declared claim window, starting only after a live proof code is shown on stream, with timestamped video check-ins, saved AI-reviewable evidence, and an uncut finish clip that proves the outcome.`,
     explanation:
-      'Added live-start proof, timestamped evidence, and a clear claim-window constraint.',
+      'Added live-start proof, timestamped evidence, AI-reviewable evidence, and a clear claim-window constraint.',
     source: 'rubric',
   };
 }
 
 function getRewriteSystemPrompt(section) {
   if (section === 'proofRules') {
-    return 'Rewrite Claimroom proof rules. Return strict JSON with rewrittenClaim and explanation. Preserve the user intent and all user-provided facts. Accuracy is mandatory: do not invent or guess facts, dates, distances, time targets, named places, exact addresses, route names, or measurements unless they appear in the original text. Make the proof rules specific, durable, reviewable, and constrained to the claim window. Prefer one rule per line. Add live proof code, stream-start requirement, timestamped evidence, saved recording/artifact, witness/recorder, GPS or independently checkable evidence only when stated by the user or as a generic proof source without guessing measurements. Do not add unsafe or illegal behavior.';
+    return 'Rewrite Claimroom proof rules for an AI-assisted verification platform. Return strict JSON with rewrittenClaim and explanation. Preserve the user intent and all user-provided facts. Accuracy is mandatory: do not invent or guess facts, dates, distances, time targets, named places, exact addresses, route names, or measurements unless they appear in the original text. Make the proof rules specific, durable, reviewable, machine-checkable where possible, and constrained to the claim window. Prefer one rule per line. Add live proof code, stream-start requirement, timestamped evidence, saved recording/artifact, witness/recorder, GPS, device metadata, transcript, evidence links, or independently checkable evidence only when stated by the user or as a generic proof source without guessing measurements. Include enough structure for an AI verifier to inspect what happened, when it happened, and whether the outcome was met. Do not add unsafe or illegal behavior.';
   }
 
   if (section === 'liveSetup') {
-    return 'Rewrite Claimroom live proof setup. Return strict JSON with rewrittenClaim and explanation. Preserve the user intent and all user-provided facts. Accuracy is mandatory: do not invent or guess facts, dates, distances, time targets, named places, exact addresses, route names, or measurements unless they appear in the original text. Make the setup clear about capture devices or sources, coverage, continuity from start to finish, saved recordings/evidence links, and any witness or recorder support. Keep it concise and practical. Do not add unsafe or illegal behavior.';
+    return 'Rewrite Claimroom live proof setup for an AI-assisted verification platform. Return strict JSON with rewrittenClaim and explanation. Preserve the user intent and all user-provided facts. Accuracy is mandatory: do not invent or guess facts, dates, distances, time targets, named places, exact addresses, route names, or measurements unless they appear in the original text. Make the setup clear about capture devices or sources, coverage, continuity from start to finish, saved recordings/evidence links, metadata/GPS/transcript availability when applicable, and any witness or recorder support. Include enough structure for an AI verifier to inspect timestamps, camera coverage, saved artifacts, and objective outcome evidence. Keep it concise and practical. Do not add unsafe or illegal behavior.';
   }
 
-  return 'Rewrite Claimroom claim titles. Return strict JSON with rewrittenClaim and explanation. Preserve the claimer intent, but make the claim specific, exciting, durable, provable, and constrained to the claim window. Accuracy is mandatory: do not invent or guess facts. Do not add calendar dates, distances, pace targets, time targets, named places, exact addresses, route names, or measurements unless they appear in the original claim. If a measurement is unknown, say it must be proven by live, GPS, timestamped, witness, or recorded evidence instead of guessing a number. The rewrittenClaim must be a future-tense commitment that starts exactly with "I will". Never write as if the claimer already completed it. Never use phrases like "I successfully completed", "I proved", "I have", "I ran", or "proving I can". If no deadline is provided, say "by the declared deadline" or "within the declared claim window". Include live proof, proof code or stream-start constraint, timestamped evidence, objective outcome, and deadline/window language. Keep it as one first-person claim sentence. Do not add unsafe or illegal behavior.';
+  return 'Rewrite Claimroom claim titles for an AI-assisted verification platform. Return strict JSON with rewrittenClaim and explanation. Preserve the claimer intent, but make the claim specific, exciting, durable, provable, and constrained to the claim window. Accuracy is mandatory: do not invent or guess facts. Do not add calendar dates, distances, pace targets, time targets, named places, exact addresses, route names, or measurements unless they appear in the original claim. If a measurement is unknown, say it must be proven by live, GPS, timestamped, witness, metadata, or recorded evidence instead of guessing a number. The rewrittenClaim must be a future-tense commitment that starts exactly with "I will". Never write as if the claimer already completed it. Never use phrases like "I successfully completed", "I proved", "I have", "I ran", or "proving I can". If no deadline is provided, say "by the declared deadline" or "within the declared claim window". Include live proof, proof code or stream-start constraint, timestamped evidence, saved AI-reviewable proof, objective outcome, and deadline/window language. Keep it as one first-person claim sentence. Do not add unsafe or illegal behavior.';
 }
 
 async function rewriteWithOpenAi(claim, fallback, section) {
