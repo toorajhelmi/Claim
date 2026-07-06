@@ -122,6 +122,7 @@ type ClaimStatus =
 type Claim = {
   id: string;
   slug: string;
+  creator_id: string | null;
   creator_name: string;
   creator_handle: string | null;
   creator_platform: string | null;
@@ -1418,11 +1419,11 @@ function CreateClaimPage() {
       creator_platform: nullableString(claimerProfile.primary_platform),
       contact_email: nullableString(claimerProfile.contact_email),
       claim_type: 'live_claim' as const,
-      status: 'open_for_backing' as const,
+      status: 'draft' as const,
       title,
       description: nullableString(values.description),
       teaser_title: title,
-      teaser_description: `Back ${creatorName}'s live claim and watch the proof.`,
+      teaser_description: `${creatorName}'s live claim setup is being prepared for backing.`,
       stake_amount_cents: dollarsToCents(values.stakeAmount),
       pledge_threshold_cents: dollarsToCents(values.pledgeThreshold),
       live_starts_at: nullableDateTime(values.liveStartsAt),
@@ -1688,8 +1689,8 @@ function ClaimWizardReview({ values }: { values: ClaimWizardValues }) {
     <div className="wizard-review">
       <h2>Review the claim setup.</h2>
       <p>
-        This will create the claim preview page under your claimer account and open it
-        for supporters to pledge.
+        This will create a draft claim setup page under your claimer account. You can add
+        recorder access and activate it when the proof setup is ready.
       </p>
       <div className="review-list">
         {reviewItems.map(([label, value]) => (
@@ -1752,10 +1753,48 @@ function FormSelect({
   );
 }
 
+function inferRecorderSetup(claim: Claim, proofRules: ProofRule[]) {
+  const proofText = [
+    claim.proof_summary ?? '',
+    claim.event_context ?? '',
+    proofRules.map((rule) => rule.rule).join('\n'),
+  ]
+    .join('\n')
+    .toLowerCase();
+  const selfRecommended = /\b(my|my own|me|myself|gopro|go pro|phone|head view|screen share)\b/.test(proofText);
+  const otherRecommended = /\b(friend|partner|recorder|witness|second|another|full body|camera two|2 cameras)\b/.test(proofText);
+  const responsibilities = otherRecommended
+    ? 'Record the attempt as a second camera/witness, keep the claimer visible when possible, and help preserve timestamped evidence for AI-assisted verification.'
+    : 'Record the live attempt, show the proof code at start, capture timestamped progress, and preserve saved evidence for AI-assisted verification.';
+  const summary = otherRecommended
+    ? 'Your proof setup mentions another person or second view, so another recorder should receive access. You can also add yourself if you will record part of the proof.'
+    : selfRecommended
+      ? 'Your proof setup sounds like the claimer can record directly. Select yourself now, or invite another recorder if someone else will help.'
+      : 'Add yourself or another recorder before activation so recording access and instructions can be sent before the live attempt.';
+
+  return {
+    selfRecommended: selfRecommended || !otherRecommended,
+    otherRecommended,
+    responsibilities,
+    summary,
+  };
+}
+
 function ClaimDetailPage({ slug }: { slug: string }) {
   const { data, loading, error, reload } = useClaimBundle(slug);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [pledgeMessage, setPledgeMessage] = useState('');
   const [inviteLink, setInviteLink] = useState('');
+  const [setupMessage, setSetupMessage] = useState('');
+
+  useEffect(() => {
+    async function loadCurrentUser() {
+      const { data: userData } = await supabase.auth.getUser();
+      setCurrentUserId(userData.user?.id ?? null);
+    }
+
+    void loadCurrentUser();
+  }, []);
 
   async function handlePledge(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1784,7 +1823,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
       .from('claim_recorder_invites')
       .insert({
         claim_id: data.claim.id,
-        role: formData.get('role'),
+        role: String(formData.get('role') || 'recorder'),
         invitee_name: nullableString(formData.get('inviteeName')),
         invitee_contact: nullableString(formData.get('inviteeContact')),
         payout_share_bps: Number(formData.get('payoutShareBps') || 0),
@@ -1796,8 +1835,55 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     if (!inviteError) await reload();
   }
 
+  async function handleUseSelfRecorder() {
+    if (!data) return;
+
+    const hasSelfRecorder = data.recorderInvites.some(
+      (invite) => invite.invitee_contact === data.claim.contact_email && invite.status !== 'declined',
+    );
+
+    if (hasSelfRecorder) {
+      setSetupMessage('Self recording access is already added.');
+      return;
+    }
+
+    const { error: insertError } = await supabase.from('claim_recorder_invites').insert({
+      claim_id: data.claim.id,
+      role: 'recorder',
+      invitee_name: data.claim.creator_name,
+      invitee_contact: data.claim.contact_email,
+      payout_share_bps: 0,
+      responsibilities: 'Claimer will record their own live proof and receive recording access.',
+      status: 'accepted',
+    });
+
+    setSetupMessage(insertError ? insertError.message : 'Self recording access added.');
+    if (!insertError) await reload();
+  }
+
+  async function handleActivateClaim() {
+    if (!data) return;
+
+    if (data.recorderInvites.length === 0) {
+      setSetupMessage('Add yourself or invite at least one recorder before activating.');
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from('claims')
+      .update({ status: 'open_for_backing' })
+      .eq('id', data.claim.id);
+
+    setSetupMessage(updateError ? updateError.message : 'Claim activated. Supporters can now back it.');
+    if (!updateError) await reload();
+  }
+
   if (loading) return <LoadingPage label="Loading claim..." />;
   if (error || !data) return <ErrorPage message={error ?? 'Claim not found.'} />;
+
+  const isDraft = data.claim.status === 'draft';
+  const isOwner = currentUserId === data.claim.creator_id;
+  const recorderSuggestion = inferRecorderSetup(data.claim, data.proofRules);
 
   return (
     <AppChrome>
@@ -1808,56 +1894,119 @@ function ClaimDetailPage({ slug }: { slug: string }) {
             <p className="eyebrow">Preview page</p>
             <h2>{data.claim.title}</h2>
             <p>{data.claim.description}</p>
-            <ShareBar claim={data.claim} />
+            {isDraft ? (
+              <p className="form-message">
+                This is a private draft. Add recording access and activate it before sharing with supporters.
+              </p>
+            ) : (
+              <ShareBar claim={data.claim} />
+            )}
             <ProofRules rules={data.proofRules} />
           </section>
 
           <aside className="mvp-panel">
-            <p className="eyebrow">Pledge threshold</p>
-            <Metric label="Pledged" value={formatMoney(data.claim.pledge_pool_cents)} />
-            <Metric label="Threshold" value={formatMoney(data.claim.pledge_threshold_cents)} />
-            <Metric label="Supporters" value={String(data.claim.supporter_count)} />
-            <ProgressBar value={data.claim.pledge_pool_cents} max={data.claim.pledge_threshold_cents} />
-            <form className="compact-form" onSubmit={handlePledge}>
-              <FormField label="Name" name="supporterName" required placeholder="Supporter name" />
-              <FormField label="Handle" name="supporterHandle" placeholder="@supporter" />
-              <FormField label="Email for live reminder" name="supporterEmail" type="email" placeholder="optional" />
-              <FormField label="Pledge amount ($)" name="amount" type="number" defaultValue="25" />
-              <button className="button button-primary" type="submit">Back this claim</button>
-            </form>
-            {pledgeMessage ? <p className="form-message">{pledgeMessage}</p> : null}
+            {isDraft ? (
+              <>
+                <p className="eyebrow">Draft setup</p>
+                <Metric label="Status" value="Setup incomplete" />
+                <Metric label="Recording access" value={data.recorderInvites.length > 0 ? 'Added' : 'Needed'} />
+                <Metric label="Payment setup" value="Deferred until lock" />
+                <p className="form-message">
+                  The claim is saved, but not public for backing yet. Add recording access, then activate it.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="eyebrow">Pledge threshold</p>
+                <Metric label="Pledged" value={formatMoney(data.claim.pledge_pool_cents)} />
+                <Metric label="Threshold" value={formatMoney(data.claim.pledge_threshold_cents)} />
+                <Metric label="Supporters" value={String(data.claim.supporter_count)} />
+                <ProgressBar value={data.claim.pledge_pool_cents} max={data.claim.pledge_threshold_cents} />
+                <form className="compact-form" onSubmit={handlePledge}>
+                  <FormField label="Name" name="supporterName" required placeholder="Supporter name" />
+                  <FormField label="Handle" name="supporterHandle" placeholder="@supporter" />
+                  <FormField label="Email for live reminder" name="supporterEmail" type="email" placeholder="optional" />
+                  <FormField label="Pledge amount ($)" name="amount" type="number" defaultValue="25" />
+                  <button className="button button-primary" type="submit">Back this claim</button>
+                </form>
+                {pledgeMessage ? <p className="form-message">{pledgeMessage}</p> : null}
+              </>
+            )}
           </aside>
         </div>
 
         <div className="mvp-layout">
           <section className="mvp-panel">
-            <p className="eyebrow">Recorder / witness invite</p>
+            <p className="eyebrow">Recording access</p>
+            {isDraft && isOwner ? (
+              <div className="setup-suggestion">
+                <strong>AI setup suggestion</strong>
+                <p>{recorderSuggestion.summary}</p>
+                <div className="claim-meta">
+                  {recorderSuggestion.selfRecommended ? <span>Self recorder suggested</span> : null}
+                  {recorderSuggestion.otherRecommended ? <span>Other recorder suggested</span> : null}
+                </div>
+              </div>
+            ) : null}
+            {isDraft && isOwner ? (
+              <button className="button button-primary" type="button" onClick={() => void handleUseSelfRecorder()}>
+                I will record myself
+              </button>
+            ) : null}
             <form className="compact-form" onSubmit={handleInvite}>
               <label>
                 Role
-                <select name="role" defaultValue="recorder">
+                <select name="role" defaultValue={recorderSuggestion.otherRecommended ? 'recorder' : 'witness'}>
                   <option value="recorder">Recorder</option>
                   <option value="witness">Witness</option>
                 </select>
               </label>
               <FormField label="Invitee name" name="inviteeName" placeholder="Alex" />
-              <FormField label="Contact" name="inviteeContact" placeholder="phone, email, or handle" />
-              <FormField label="Payout share bps" name="payoutShareBps" type="number" defaultValue="1000" />
+              <FormField label="Recorder email/contact" name="inviteeContact" placeholder="email, phone, or handle" />
+              <FormField label="Payout share bps" name="payoutShareBps" type="number" defaultValue={isDraft ? '0' : '1000'} />
               <label>
                 Responsibilities
-                <textarea name="responsibilities" rows={3} placeholder="Second camera, confirm check-ins, add notes..." />
+                <textarea name="responsibilities" rows={3} defaultValue={recorderSuggestion.responsibilities} placeholder="Second camera, confirm check-ins, add notes..." />
               </label>
               <button className="button button-ghost" type="submit">Create invite link</button>
             </form>
             {inviteLink ? <p className="form-message selectable">{inviteLink}</p> : null}
+            {setupMessage ? <p className="form-message">{setupMessage}</p> : null}
           </section>
 
           <section className="mvp-panel">
-            <p className="eyebrow">Next steps</p>
-            <div className="action-grid">
-              <a className="button button-primary" href={`/claims/${data.claim.slug}/live`}>Open live room</a>
-              <a className="button button-ghost" href={`/claims/${data.claim.slug}/result`}>View result page</a>
-            </div>
+            <p className="eyebrow">{isDraft ? 'Activate claim' : 'Next steps'}</p>
+            {isDraft && isOwner ? (
+              <>
+                <div className="rule-list">
+                  <div className="rule-item">
+                    <span>1</span>
+                    <p>Claim, proof, and live setup saved.</p>
+                  </div>
+                  <div className="rule-item">
+                    <span>2</span>
+                    <p>{data.recorderInvites.length > 0 ? 'Recording access added.' : 'Add yourself or another recorder.'}</p>
+                  </div>
+                  <div className="rule-item">
+                    <span>3</span>
+                    <p>Payment and lock flow can be completed after the draft is active.</p>
+                  </div>
+                </div>
+                <button
+                  className="button button-primary"
+                  type="button"
+                  onClick={() => void handleActivateClaim()}
+                  disabled={data.recorderInvites.length === 0}
+                >
+                  Activate for backing
+                </button>
+              </>
+            ) : (
+              <div className="action-grid">
+                <a className="button button-primary" href={`/claims/${data.claim.slug}/live`}>Open live room</a>
+                <a className="button button-ghost" href={`/claims/${data.claim.slug}/result`}>View result page</a>
+              </div>
+            )}
             <SupporterWall pledges={data.pledges} />
             <InviteList invites={data.recorderInvites} />
           </section>
