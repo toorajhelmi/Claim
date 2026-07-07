@@ -2137,7 +2137,7 @@ h3 {
 }
 
 .claim-header {
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
 }
 
 .claim-meta {
@@ -2187,15 +2187,19 @@ h3 {
 }
 
 .share-bar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.25rem, 1fr));
   gap: 0.75rem;
   margin: 1.25rem 0;
 }
 
 .share-bar input {
-  flex: 1 1 20rem;
   min-width: 0;
+  grid-column: 1 / -1;
+}
+
+.share-bar .button {
+  width: 100%;
 }
 
 .rule-list {
@@ -2263,6 +2267,15 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
+}
+
+.pledge-panel .compact-form {
+  margin-top: 1rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .progress-fill {
@@ -2391,6 +2404,7 @@ h3 {
 
   .share-bar {
     display: grid;
+    grid-template-columns: 1fr;
   }
 
   .dashboard-hero,

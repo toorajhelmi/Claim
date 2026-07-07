@@ -2190,6 +2190,41 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     }
   }
 
+  async function handleInviteSupporters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!data) return;
+
+    const formData = new FormData(event.currentTarget);
+    const emails = parseEmailList(String(formData.get('supporterEmails') || ''));
+
+    if (emails.length === 0) {
+      setPledgeMessage('Add at least one supporter email.');
+      return;
+    }
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const response = await fetch('/api/send-supporter-invites', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sessionData.session?.access_token ? { Authorization: `Bearer ${sessionData.session.access_token}` } : {}),
+      },
+      body: JSON.stringify({
+        claimId: data.claim.id,
+        emails,
+      }),
+    });
+    const body = (await response.json().catch(() => null)) as { error?: string; sent?: number; skipped?: number } | null;
+
+    if (!response.ok) {
+      setPledgeMessage(body?.error ?? 'Could not send supporter invites.');
+      return;
+    }
+
+    setPledgeMessage(`Sent ${body?.sent ?? emails.length} supporter invite${(body?.sent ?? emails.length) === 1 ? '' : 's'}.`);
+    event.currentTarget.reset();
+  }
+
   function setDraftReviewMode(nextMode: 'review' | 'activate' | 'edit') {
     setDraftMode(nextMode);
     setSetupMessage('');
@@ -2944,7 +2979,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
             <ProofRules rules={data.proofRules} />
           </section>
 
-          <aside className="mvp-panel">
+          <aside className="mvp-panel pledge-panel">
             {isDraft ? (
               <>
                 <p className="eyebrow">Draft</p>
@@ -2962,13 +2997,31 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                 <Metric label="Threshold" value={formatMoney(data.claim.pledge_threshold_cents)} />
                 <Metric label="Supporters" value={String(data.claim.supporter_count)} />
                 <ProgressBar value={data.claim.pledge_pool_cents} max={data.claim.pledge_threshold_cents} />
-                <form className="compact-form" onSubmit={handlePledge}>
-                  <FormField label="Name" name="supporterName" required placeholder="Supporter name" />
-                  <FormField label="Handle" name="supporterHandle" placeholder="@supporter" />
-                  <FormField label="Email for live reminder" name="supporterEmail" type="email" placeholder="optional" />
-                  <FormField label="Pledge amount ($)" name="amount" type="number" defaultValue="25" />
-                  <button className="button button-primary" type="submit">Back this claim</button>
-                </form>
+                {isOwner ? (
+                  <form className="compact-form invite-supporters-form" onSubmit={handleInviteSupporters}>
+                    <p className="form-message">
+                      Invite supporters to pledge. Claimroom will email each person a link to this claim page with
+                      the share message and pledge context.
+                    </p>
+                    <label>
+                      Supporter emails
+                      <textarea
+                        name="supporterEmails"
+                        rows={4}
+                        placeholder="friend@example.com supporter@example.com"
+                        required
+                      />
+                    </label>
+                    <button className="button button-primary" type="submit">Send invite</button>
+                  </form>
+                ) : (
+                  <form className="compact-form" onSubmit={handlePledge}>
+                    <FormField label="Name" name="supporterName" required placeholder="Supporter name" />
+                    <FormField label="Email for live reminder" name="supporterEmail" type="email" placeholder="optional" />
+                    <FormField label="Pledge amount ($)" name="amount" type="number" defaultValue="25" />
+                    <button className="button button-primary" type="submit">Back this claim</button>
+                  </form>
+                )}
                 {pledgeMessage ? <p className="form-message">{pledgeMessage}</p> : null}
               </>
             )}
@@ -3299,7 +3352,6 @@ function ClaimHeader({ claim }: { claim: Claim }) {
   return (
     <section className="claim-header">
       <p className="eyebrow">{formatClaimType(claim.claim_type)}</p>
-      <h1 className="page-title">{claim.title}</h1>
       <div className="claim-meta">
         <span>{claim.status.replace(/_/g, ' ')}</span>
         <span>{formatMoney(claim.pledge_pool_cents)} pledged</span>
@@ -3326,15 +3378,38 @@ function ProofRules({ rules }: { rules: ProofRule[] }) {
 
 function ShareBar({ claim }: { claim: Claim }) {
   const url = `${window.location.origin}/claims/${claim.slug}`;
-  const shareText = `I am making a ${appConfig.name} claim: ${claim.title}. Back it and watch the proof.`;
+  const shareText = [
+    `I am making a ${appConfig.name} claim: "${claim.title}"`,
+    `Goal: ${formatMoney(claim.pledge_threshold_cents)} pledged before proof starts.`,
+    'Back it, share it, and watch the live proof.',
+  ].join('\n');
+  const encodedUrl = encodeURIComponent(url);
+  const encodedText = encodeURIComponent(shareText);
+  const encodedTextWithUrl = encodeURIComponent(`${shareText}\n${url}`);
+
   return (
     <div className="share-bar">
       <input readOnly value={url} aria-label="Claim share URL" />
-      <a className="button button-ghost" href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`${shareText} ${url}`)}`} target="_blank" rel="noreferrer">
+      <a className="button button-ghost" href={`https://twitter.com/intent/tweet?text=${encodedTextWithUrl}`} target="_blank" rel="noreferrer">
         Share on X
       </a>
-      <a className="button button-ghost" href={`https://wa.me/?text=${encodeURIComponent(`${shareText} ${url}`)}`} target="_blank" rel="noreferrer">
+      <a className="button button-ghost" href={`https://wa.me/?text=${encodedTextWithUrl}`} target="_blank" rel="noreferrer">
         WhatsApp
+      </a>
+      <a className="button button-ghost" href={`https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`} target="_blank" rel="noreferrer">
+        Telegram
+      </a>
+      <a className="button button-ghost" href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`} target="_blank" rel="noreferrer">
+        Facebook
+      </a>
+      <a className="button button-ghost" href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`} target="_blank" rel="noreferrer">
+        LinkedIn
+      </a>
+      <a className="button button-ghost" href={`https://www.reddit.com/submit?url=${encodedUrl}&title=${encodedText}`} target="_blank" rel="noreferrer">
+        Reddit
+      </a>
+      <a className="button button-ghost" href={`mailto:?subject=${encodeURIComponent(`${appConfig.name} claim: ${claim.title}`)}&body=${encodedTextWithUrl}`}>
+        Email
       </a>
     </div>
   );
@@ -3482,6 +3557,17 @@ function formatClaimType(claimType: ClaimType) {
 function nullableString(value: FormDataEntryValue | null) {
   const text = String(value ?? '').trim();
   return text.length > 0 ? text : null;
+}
+
+function parseEmailList(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(/[\s,;]+/)
+        .map((email) => email.trim().toLowerCase())
+        .filter((email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)),
+    ),
+  );
 }
 
 function nullableDateTime(value: FormDataEntryValue | null) {
