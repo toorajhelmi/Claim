@@ -28,6 +28,10 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanText(value));
 }
 
+function isActivationPaymentBypassEnabled() {
+  return ['1', 'true', 'yes', 'on'].includes(String(process.env.BYPASS_ACTIVATION_PAYMENT || '').toLowerCase());
+}
+
 function isEnabled(value) {
   return value === true;
 }
@@ -94,6 +98,123 @@ async function insertInviteIfMissing(supabaseAdmin, claimId, invite) {
   });
 }
 
+function buildRecorderEmailHtml({ appName, claim, claimUrl, inviteUrl, invite }) {
+  return `
+    <div style="font-family:Inter,Arial,sans-serif;background:#05070d;color:#f8fbff;padding:32px">
+      <div style="max-width:620px;margin:0 auto;background:#10141f;border:1px solid rgba(255,255,255,0.12);border-radius:24px;overflow:hidden">
+        <div style="padding:24px 28px;background:linear-gradient(135deg,rgba(112,255,139,0.18),rgba(66,221,255,0.14))">
+          <div style="display:inline-block;background:#111827;border-radius:999px;padding:8px 12px;font-weight:800">Claimroom</div>
+          <h1 style="margin:18px 0 0;font-size:30px;line-height:1.08">You are invited to support proof for a claim.</h1>
+        </div>
+        <div style="padding:28px">
+          <p style="color:#cbd2df;font-size:16px;line-height:1.6">
+            ${claim.creator_name} activated this ${appName} claim and listed you as a proof recorder/source.
+          </p>
+          <h2 style="font-size:22px;line-height:1.2;margin:18px 0">${claim.title}</h2>
+          <p style="color:#cbd2df;font-size:16px;line-height:1.6">
+            ${cleanText(invite.responsibilities) || 'Help capture and preserve the live proof evidence for AI-assisted review.'}
+          </p>
+          <p style="margin:26px 0">
+            <a href="${inviteUrl}" style="display:inline-block;background:linear-gradient(135deg,#70ff8b,#42ddff);color:#041006;text-decoration:none;font-weight:900;border-radius:999px;padding:14px 22px">
+              Review recorder instructions
+            </a>
+          </p>
+          <p style="color:#8d96a8;font-size:13px;line-height:1.6">
+            Claim page: <a href="${claimUrl}" style="color:#70ff8b">${claimUrl}</a>
+          </p>
+        </div>
+        <div style="padding:20px 28px;border-top:1px solid rgba(255,255,255,0.1);color:#8d96a8;font-size:13px;line-height:1.6">
+          Want to follow the proof live? <a href="${claimUrl}" style="color:#70ff8b;font-weight:800">Join claim</a>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function sendRecorderEmails({ resendApiKey, fromEmail, appName, origin, claim, invites }) {
+  if (!resendApiKey) {
+    return { sent: 0, skipped: invites.length, warning: 'Resend is not configured.' };
+  }
+
+  let sent = 0;
+  let skipped = 0;
+
+  for (const invite of invites) {
+    if (!isValidEmail(invite.invitee_contact)) {
+      skipped += 1;
+      continue;
+    }
+
+    const claimUrl = `${origin}/claims/${claim.slug}`;
+    const inviteUrl = `${origin}/recorder/invite/${invite.invite_token}`;
+    const resendResponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [invite.invitee_contact],
+        subject: `Recorder invite: ${claim.title}`,
+        html: buildRecorderEmailHtml({
+          appName,
+          claim,
+          claimUrl,
+          inviteUrl,
+          invite,
+        }),
+      }),
+    });
+
+    if (resendResponse.ok) {
+      sent += 1;
+    } else {
+      skipped += 1;
+    }
+  }
+
+  return { sent, skipped };
+}
+
+async function activateClaimWithoutStripe({ supabaseAdmin, origin, claim, setupSummary }) {
+  const proofSummary = [
+    claim.proof_summary ?? '',
+    setupSummary ? `Activation setup:\n${setupSummary}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const { error: updateError } = await supabaseAdmin
+    .from('claims')
+    .update({
+      status: 'open_for_backing',
+      proof_summary: proofSummary,
+    })
+    .eq('id', claim.id);
+
+  if (updateError) {
+    return { error: updateError.message };
+  }
+
+  const { data: invites } = await supabaseAdmin
+    .from('claim_recorder_invites')
+    .select('invite_token, invitee_contact, responsibilities')
+    .eq('claim_id', claim.id)
+    .eq('status', 'pending');
+
+  const emailResult = await sendRecorderEmails({
+    resendApiKey: process.env.RESEND_API_KEY,
+    fromEmail: process.env.RESEND_FROM_EMAIL || 'Claimroom <onboarding@resend.dev>',
+    appName: process.env.VITE_APP_NAME || 'Claimroom',
+    origin,
+    claim,
+    invites: invites ?? [],
+  });
+
+  return { emailResult };
+}
+
 module.exports = async function handler(request, response) {
   if (request.method !== 'POST') {
     response.setHeader('Allow', 'POST');
@@ -105,6 +226,7 @@ module.exports = async function handler(request, response) {
   const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_JWT || process.env.SUPABASE_SECRET_KEY;
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+  const bypassActivationPayment = isActivationPaymentBypassEnabled();
   const origin = getOrigin(request);
 
   if (!supabaseUrl || !publishableKey || !serviceRoleKey) {
@@ -112,7 +234,7 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  if (!stripeSecretKey) {
+  if (!bypassActivationPayment && !stripeSecretKey) {
     json(response, 500, { error: 'Stripe is not configured yet. Add STRIPE_SECRET_KEY and retry activation.' });
     return;
   }
@@ -145,7 +267,7 @@ module.exports = async function handler(request, response) {
   });
   const { data: claim, error: claimError } = await supabaseAdmin
     .from('claims')
-    .select('id, slug, creator_id, creator_name, contact_email, title, stake_amount_cents, status')
+    .select('id, slug, creator_id, creator_name, contact_email, title, stake_amount_cents, status, proof_summary')
     .eq('id', claimId)
     .single();
 
@@ -207,6 +329,27 @@ module.exports = async function handler(request, response) {
 
   const setupSummary = buildActivationSetupSummary(setup);
   const amountCents = Number(claim.stake_amount_cents || 0);
+
+  if (bypassActivationPayment) {
+    const activationResult = await activateClaimWithoutStripe({
+      supabaseAdmin,
+      origin,
+      claim,
+      setupSummary,
+    });
+
+    if (activationResult.error) {
+      json(response, 400, { error: activationResult.error });
+      return;
+    }
+
+    json(response, 200, {
+      activated: true,
+      claimId: claim.id,
+      emailResult: activationResult.emailResult,
+    });
+    return;
+  }
 
   if (amountCents < 50) {
     json(response, 400, { error: 'Activation charge must be at least $0.50. Edit the stake amount before activating.' });

@@ -2470,12 +2470,20 @@ function ClaimDetailPage({ slug }: { slug: string }) {
         setup,
       }),
     });
-    const body = (await response.json().catch(() => null)) as { error?: string; url?: string } | null;
+    const body = (await response.json().catch(() => null)) as { activated?: boolean; error?: string; url?: string } | null;
 
     setActivationStatus('idle');
 
-    if (!response.ok || !body?.url) {
+    if (!response.ok || (!body?.url && !body?.activated)) {
       setSetupMessage(body?.error ?? 'Could not start payment. Please retry.');
+      return;
+    }
+
+    if (body.activated) {
+      clearStoredActivationSetup(data.claim.id);
+      setSetupMessage('Development payment bypass complete. Claim activated and recorder emails sent.');
+      window.history.replaceState(null, '', `/claims/${slug}`);
+      await reload();
       return;
     }
 
