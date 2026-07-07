@@ -84,9 +84,17 @@ function buildSupporterInviteHtml({ appName, claim, claimUrl }) {
             <span style="word-break:break-all">${claimUrl}</span>
           </p>
         </div>
+        <div style="padding:20px 28px;border-top:1px solid rgba(255,255,255,0.1);color:#8d96a8;font-size:13px;line-height:1.6">
+          Want to follow the proof live? <a href="${claimUrl}" style="color:#70ff8b;font-weight:800">Join claim</a>
+        </div>
       </div>
     </div>
   `;
+}
+
+async function readResendError(resendResponse) {
+  const body = await resendResponse.json().catch(() => null);
+  return body?.message || body?.error || `Resend returned HTTP ${resendResponse.status}.`;
 }
 
 function formatMoney(cents) {
@@ -190,6 +198,7 @@ module.exports = async function handler(request, response) {
   });
   let sent = 0;
   let skipped = 0;
+  const errors = [];
 
   for (const email of emails) {
     const resendResponse = await fetch('https://api.resend.com/emails', {
@@ -210,12 +219,31 @@ module.exports = async function handler(request, response) {
       sent += 1;
     } else {
       skipped += 1;
+      const error = await readResendError(resendResponse);
+      errors.push({ email, error });
+      console.warn('Supporter invite email failed', {
+        claimId: claim.id,
+        email,
+        status: resendResponse.status,
+        error,
+      });
     }
+  }
+
+  if (sent === 0 && skipped > 0) {
+    json(response, 502, {
+      error: errors[0]?.error || 'No supporter invites were sent.',
+      sent,
+      skipped,
+      errors,
+    });
+    return;
   }
 
   json(response, 200, {
     ok: true,
     sent,
     skipped,
+    errors,
   });
 };

@@ -20,6 +20,15 @@ function cleanText(value) {
   return String(value ?? '').trim();
 }
 
+function escapeHtml(value) {
+  return cleanText(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function normalizeEmail(value) {
   return cleanText(value).toLowerCase();
 }
@@ -103,16 +112,16 @@ function buildRecorderEmailHtml({ appName, claim, claimUrl, inviteUrl, invite })
     <div style="font-family:Inter,Arial,sans-serif;background:#05070d;color:#f8fbff;padding:32px">
       <div style="max-width:620px;margin:0 auto;background:#10141f;border:1px solid rgba(255,255,255,0.12);border-radius:24px;overflow:hidden">
         <div style="padding:24px 28px;background:linear-gradient(135deg,rgba(112,255,139,0.18),rgba(66,221,255,0.14))">
-          <div style="display:inline-block;background:#111827;border-radius:999px;padding:8px 12px;font-weight:800">Claimroom</div>
+          <div style="display:inline-block;background:#111827;border-radius:999px;padding:8px 12px;font-weight:800">${escapeHtml(appName)}</div>
           <h1 style="margin:18px 0 0;font-size:30px;line-height:1.08">You are invited to support proof for a claim.</h1>
         </div>
         <div style="padding:28px">
           <p style="color:#cbd2df;font-size:16px;line-height:1.6">
-            ${claim.creator_name} activated this ${appName} claim and listed you as a proof recorder/source.
+            ${escapeHtml(claim.creator_name)} activated this ${escapeHtml(appName)} claim and listed you as a proof recorder/source.
           </p>
-          <h2 style="font-size:22px;line-height:1.2;margin:18px 0">${claim.title}</h2>
+          <h2 style="font-size:22px;line-height:1.2;margin:18px 0">${escapeHtml(claim.title)}</h2>
           <p style="color:#cbd2df;font-size:16px;line-height:1.6">
-            ${cleanText(invite.responsibilities) || 'Help capture and preserve the live proof evidence for AI-assisted review.'}
+            ${escapeHtml(invite.responsibilities) || 'Help capture and preserve the live proof evidence for AI-assisted review.'}
           </p>
           <p style="margin:26px 0">
             <a href="${inviteUrl}" style="display:inline-block;background:linear-gradient(135deg,#70ff8b,#42ddff);color:#041006;text-decoration:none;font-weight:900;border-radius:999px;padding:14px 22px">
@@ -131,17 +140,35 @@ function buildRecorderEmailHtml({ appName, claim, claimUrl, inviteUrl, invite })
   `;
 }
 
+async function readResendError(resendResponse) {
+  const body = await resendResponse.json().catch(() => null);
+  return body?.message || body?.error || `Resend returned HTTP ${resendResponse.status}.`;
+}
+
 async function sendRecorderEmails({ resendApiKey, fromEmail, appName, origin, claim, invites }) {
   if (!resendApiKey) {
-    return { sent: 0, skipped: invites.length, warning: 'Resend is not configured.' };
+    return {
+      sent: 0,
+      skipped: invites.length,
+      warning: 'Resend is not configured.',
+      errors: invites.map((invite) => ({
+        email: cleanText(invite.invitee_contact),
+        error: 'Resend is not configured.',
+      })),
+    };
   }
 
   let sent = 0;
   let skipped = 0;
+  const errors = [];
 
   for (const invite of invites) {
     if (!isValidEmail(invite.invitee_contact)) {
       skipped += 1;
+      errors.push({
+        email: cleanText(invite.invitee_contact),
+        error: 'Invalid recorder email.',
+      });
       continue;
     }
 
@@ -171,10 +198,21 @@ async function sendRecorderEmails({ resendApiKey, fromEmail, appName, origin, cl
       sent += 1;
     } else {
       skipped += 1;
+      const error = await readResendError(resendResponse);
+      errors.push({
+        email: invite.invitee_contact,
+        error,
+      });
+      console.warn('Recorder invite email failed', {
+        claimId: claim.id,
+        inviteeContact: invite.invitee_contact,
+        status: resendResponse.status,
+        error,
+      });
     }
   }
 
-  return { sent, skipped };
+  return { sent, skipped, errors };
 }
 
 async function activateClaimWithoutStripe({ supabaseAdmin, origin, claim, setupSummary }) {
