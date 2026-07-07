@@ -137,6 +137,21 @@ function buildRecorderEmailHtml({ appName, claim, claimUrl, inviteUrl, invite })
   `;
 }
 
+function buildRecorderEmailText({ appName, claim, inviteUrl, invite }) {
+  return [
+    `${appName} recorder invite`,
+    '',
+    `${claim.creator_name} activated this ${appName} claim and listed you as a proof recorder/source:`,
+    claim.title,
+    '',
+    `Responsibilities: ${cleanText(invite.responsibilities) || 'Help capture and preserve the live proof evidence for AI-assisted review.'}`,
+    '',
+    `Review recorder instructions: ${inviteUrl}`,
+    '',
+    `${appName} keeps recorder instructions, live proof access, and evidence context in one place.`,
+  ].join('\n');
+}
+
 async function readResendError(resendResponse) {
   const body = await resendResponse.json().catch(() => null);
   return body?.message || body?.error || `Resend returned HTTP ${resendResponse.status}.`;
@@ -181,6 +196,12 @@ async function sendRecorderEmails({ resendApiKey, fromEmail, appName, origin, cl
         from: fromEmail,
         to: [invite.invitee_contact],
         subject: `${appName} recorder invite`,
+        text: buildRecorderEmailText({
+          appName,
+          claim,
+          inviteUrl,
+          invite,
+        }),
         html: buildRecorderEmailHtml({
           appName,
           claim,

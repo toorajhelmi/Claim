@@ -93,6 +93,22 @@ function buildSupporterInviteHtml({ appName, claim, claimUrl }) {
   `;
 }
 
+function buildSupporterInviteText({ appName, claim, claimUrl }) {
+  return [
+    `${claim.creator_name} invited you to support this goal:`,
+    claim.title,
+    '',
+    `This goal is open for backing on ${appName}. Supporters can pledge, share the claim, and watch the proof when it goes live.`,
+    '',
+    `Pledge goal: ${claim.pledgeGoal}`,
+    '',
+    `Open claim: ${claimUrl}`,
+    '',
+    `Any pledge you make goes to ${claim.creator_name} if the goal is achieved and verified.`,
+    `If the proof does not verify, you receive a share of ${claim.creator_name}'s locked amount of ${claim.lockedAmount}, or you can choose to donate that share instead.`,
+  ].join('\n');
+}
+
 async function readResendError(resendResponse) {
   const body = await resendResponse.json().catch(() => null);
   return body?.message || body?.error || `Resend returned HTTP ${resendResponse.status}.`;
@@ -198,6 +214,15 @@ module.exports = async function handler(request, response) {
     },
     claimUrl,
   });
+  const text = buildSupporterInviteText({
+    appName,
+    claim: {
+      ...claim,
+      pledgeGoal: formatMoney(claim.pledge_threshold_cents),
+      lockedAmount: formatMoney(claim.stake_amount_cents),
+    },
+    claimUrl,
+  });
   let sent = 0;
   let skipped = 0;
   const errors = [];
@@ -213,6 +238,7 @@ module.exports = async function handler(request, response) {
         from: fromEmail,
         to: [email],
         subject: `Support ${claim.creator_name}'s goal`,
+        text,
         html,
       }),
     });

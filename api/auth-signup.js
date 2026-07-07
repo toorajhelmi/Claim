@@ -34,6 +34,20 @@ function buildConfirmationHtml({ appName, actionLink, displayName }) {
   `;
 }
 
+function buildConfirmationText({ appName, actionLink, displayName }) {
+  const greeting = displayName ? `Hi ${displayName},` : 'Hi,';
+
+  return [
+    `${greeting}`,
+    '',
+    `Confirm your ${appName} account to continue setting up your live proof claim.`,
+    '',
+    `Confirm email: ${actionLink}`,
+    '',
+    `If you did not request this ${appName} account, you can ignore this email.`,
+  ].join('\n');
+}
+
 module.exports = async function handler(request, response) {
   if (request.method !== 'POST') {
     response.setHeader('Allow', 'POST');
@@ -134,6 +148,11 @@ module.exports = async function handler(request, response) {
       from: fromEmail,
       to: [normalizedEmail],
       subject: `Confirm your ${appName} account`,
+      text: buildConfirmationText({
+        appName,
+        actionLink: linkData.properties.action_link,
+        displayName: String(displayName).trim(),
+      }),
       html: buildConfirmationHtml({
         appName,
         actionLink: linkData.properties.action_link,
