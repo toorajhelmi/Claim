@@ -257,7 +257,7 @@ type ActivationSetupState = {
   recorderName: string;
   recorderContact: string;
   recorderResponsibilities: string;
-  payoutShareBps: string;
+  payoutSharePercent: string;
   externalProofLabel: string;
   externalProofDetails: string;
   externalProofLink: string;
@@ -1999,7 +1999,7 @@ function createActivationSetupState(claim: Claim, recorderSuggestion: ReturnType
     recorderName: '',
     recorderContact: '',
     recorderResponsibilities: recorderSuggestion.responsibilities,
-    payoutShareBps: '0',
+    payoutSharePercent: '10',
     externalProofLabel: '',
     externalProofDetails: '',
     externalProofLink: '',
@@ -2020,6 +2020,14 @@ function buildActivationSetupSummary(setup: ActivationSetupState) {
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+function normalizeEmail(value: string | null | undefined) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 function ClaimDetailPage({ slug }: { slug: string }) {
@@ -2234,49 +2242,77 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     setSetupMessage(insertError.message);
   }
 
+  function getActivationSetup(recorderSuggestion: ReturnType<typeof inferRecorderSetup>) {
+    if (activationSetup) {
+      return activationSetup;
+    }
+
+    if (!data?.claim) {
+      return null;
+    }
+
+    return createActivationSetupState(data.claim, recorderSuggestion);
+  }
+
   function updateActivationSetup(nextState: Partial<ActivationSetupState>) {
-    setActivationSetup((currentSetup) => (currentSetup ? { ...currentSetup, ...nextState } : currentSetup));
+    setActivationSetup((currentSetup) => {
+      const baseSetup = currentSetup ?? (data?.claim ? createActivationSetupState(data.claim, inferRecorderSetup(data.claim, data.proofRules)) : null);
+      return baseSetup ? { ...baseSetup, ...nextState } : baseSetup;
+    });
     setActivationReviews([]);
     setSetupMessage('');
   }
 
   function validateActivationSetup(recorderSuggestion: ReturnType<typeof inferRecorderSetup>) {
-    if (!activationSetup) {
+    const setup = getActivationSetup(recorderSuggestion);
+
+    if (!setup) {
       return 'Activation setup is still loading.';
     }
 
-    if (!activationSetup.selfRecording && !activationSetup.otherRecorder && !activationSetup.externalProof) {
+    if (!setup.selfRecording && !setup.otherRecorder && !setup.externalProof) {
       return 'Enable at least one proof setup option before review.';
     }
 
-    if (recorderSuggestion.selfRecommended && !activationSetup.selfRecording) {
+    if (recorderSuggestion.selfRecommended && !setup.selfRecording) {
       return 'Self recording is required by the current reviewed claim. Use Edit if you want to remove it.';
     }
 
-    if (recorderSuggestion.otherRecommended && !activationSetup.otherRecorder) {
+    if (recorderSuggestion.otherRecommended && !setup.otherRecorder) {
       return 'An additional recorder/source is required by the current reviewed claim. Use Edit if you want to remove it.';
     }
 
-    if (recorderSuggestion.externalRecommended && !activationSetup.externalProof) {
+    if (recorderSuggestion.externalRecommended && !setup.externalProof) {
       return 'An external proof source is required by the current reviewed claim. Use Edit if you want to remove it.';
     }
 
-    if (activationSetup.selfRecording && (!activationSetup.selfName.trim() || !activationSetup.selfContact.trim())) {
+    if (setup.selfRecording && (!setup.selfName.trim() || !setup.selfContact.trim())) {
       return 'Add your recorder name and contact.';
     }
 
     if (
-      activationSetup.otherRecorder &&
-      (!activationSetup.recorderName.trim() ||
-        !activationSetup.recorderContact.trim() ||
-        !activationSetup.recorderResponsibilities.trim())
+      setup.otherRecorder &&
+      (!setup.recorderName.trim() ||
+        !setup.recorderContact.trim() ||
+        !setup.recorderResponsibilities.trim())
     ) {
       return 'Add the recorder name, contact, and responsibilities.';
     }
 
+    if (setup.otherRecorder && !isValidEmail(setup.recorderContact)) {
+      return 'Enter a valid recorder email address so we can send the activation instructions.';
+    }
+
     if (
-      activationSetup.externalProof &&
-      (!activationSetup.externalProofLabel.trim() || !activationSetup.externalProofDetails.trim())
+      setup.otherRecorder &&
+      normalizeEmail(setup.recorderContact) === normalizeEmail(data?.claim.contact_email)
+    ) {
+      return 'Recorder email must be different from the claimer email.';
+    }
+
+    if (
+      setup.externalProof &&
+      (!setup.externalProofLabel.trim() || !setup.externalProofDetails.trim())
     ) {
       return 'Add the external proof source name and what it will preserve.';
     }
@@ -2285,7 +2321,12 @@ function ClaimDetailPage({ slug }: { slug: string }) {
   }
 
   async function handleReviewActivationSetup(recorderSuggestion: ReturnType<typeof inferRecorderSetup>) {
-    if (!data || !activationSetup) return;
+    const setup = getActivationSetup(recorderSuggestion);
+
+    if (!data || !setup) {
+      setSetupMessage('Activation setup is still loading.');
+      return;
+    }
 
     const validationMessage = validateActivationSetup(recorderSuggestion);
 
@@ -2301,7 +2342,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
       const proofRules = data.proofRules.map((rule) => rule.rule).join('\n');
       const liveSetupWithActivation = [
         data.claim.event_context ?? '',
-        buildActivationSetupSummary(activationSetup),
+        buildActivationSetupSummary(setup),
       ]
         .filter(Boolean)
         .join('\n');
@@ -2327,7 +2368,12 @@ function ClaimDetailPage({ slug }: { slug: string }) {
   }
 
   async function handleStartActivationPayment(recorderSuggestion: ReturnType<typeof inferRecorderSetup>) {
-    if (!data || !activationSetup) return;
+    const setup = getActivationSetup(recorderSuggestion);
+
+    if (!data || !setup) {
+      setSetupMessage('Activation setup is still loading.');
+      return;
+    }
 
     const validationMessage = validateActivationSetup(recorderSuggestion);
 
@@ -2349,7 +2395,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
       },
       body: JSON.stringify({
         claimId: data.claim.id,
-        setup: activationSetup,
+        setup,
       }),
     });
     const body = (await response.json().catch(() => null)) as { error?: string; url?: string } | null;
@@ -2507,20 +2553,33 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                           />
                         </label>
                         <label>
-                          Recorder email/contact
+                          Recorder email
                           <input
                             value={setup.recorderContact}
+                            type="email"
                             onChange={(event) => updateActivationSetup({ recorderContact: event.target.value })}
-                            placeholder="email, phone, or handle"
+                            placeholder="recorder@example.com"
                           />
                         </label>
-                        <label>
-                          Payout share bps
+                        <label className="label-with-help">
+                          <span>
+                            Payout %
+                            <span
+                              className="tooltip-icon"
+                              title="This portion will be paid to this person after the event execution is verified."
+                              aria-label="This portion will be paid to this person after the event execution is verified."
+                            >
+                              ?
+                            </span>
+                          </span>
                           <input
-                            value={setup.payoutShareBps}
+                            value={setup.payoutSharePercent}
                             type="number"
-                            onChange={(event) => updateActivationSetup({ payoutShareBps: event.target.value })}
-                            placeholder="0"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            onChange={(event) => updateActivationSetup({ payoutSharePercent: event.target.value })}
+                            placeholder="10"
                           />
                         </label>
                       </div>

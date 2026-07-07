@@ -20,6 +20,14 @@ function cleanText(value) {
   return String(value ?? '').trim();
 }
 
+function normalizeEmail(value) {
+  return cleanText(value).toLowerCase();
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanText(value));
+}
+
 function isEnabled(value) {
   return value === true;
 }
@@ -173,11 +181,25 @@ module.exports = async function handler(request, response) {
   }
 
   if (isEnabled(setup.otherRecorder)) {
+    const recorderEmail = cleanText(setup.recorderContact);
+
+    if (!isValidEmail(recorderEmail)) {
+      json(response, 400, { error: 'Enter a valid recorder email address.' });
+      return;
+    }
+
+    if (normalizeEmail(recorderEmail) === normalizeEmail(claim.contact_email)) {
+      json(response, 400, { error: 'Recorder email must be different from the claimer email.' });
+      return;
+    }
+
+    const payoutSharePercent = Math.max(0, Math.min(100, Number(setup.payoutSharePercent ?? 10)));
+
     await insertInviteIfMissing(supabaseAdmin, claim.id, {
       role: 'recorder',
       invitee_name: cleanText(setup.recorderName),
-      invitee_contact: cleanText(setup.recorderContact),
-      payout_share_bps: setup.payoutShareBps,
+      invitee_contact: recorderEmail,
+      payout_share_bps: Math.round(payoutSharePercent * 100),
       responsibilities: cleanText(setup.recorderResponsibilities),
       status: 'pending',
     });
