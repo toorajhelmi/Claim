@@ -197,8 +197,8 @@ function runRubric(claim) {
     score,
     verdict: claimable ? 'Claimable' : 'Needs tightening',
     summary: claimable
-      ? 'This is specific enough to turn into a Claimroom preview.'
-      : 'This needs clearer proof, tension, or claim-window integrity before it should become a Claimroom claim.',
+      ? 'This is specific enough to turn into a Klaimd preview.'
+      : 'This needs clearer proof, tension, or claim-window integrity before it should become a Klaimd claim.',
     criteria,
     suggestions: failed.map((criterion) => criterion.suggestion),
     source: 'rubric',
@@ -263,7 +263,7 @@ function runProofRulesRubric(content) {
     ),
   ];
 
-  return buildReviewFromCriteria(criteria, 'Proof rules are strong enough for a Claimroom claim.', 'The proof rules need clearer evidence, reviewability, or claim-window integrity.');
+  return buildReviewFromCriteria(criteria, 'Proof rules are strong enough for a Klaimd claim.', 'The proof rules need clearer evidence, reviewability, or claim-window integrity.');
 }
 
 function runLiveSetupRubric(content) {
@@ -433,7 +433,7 @@ function runLiveSetupRubric(content) {
     ),
   ];
 
-  return buildReviewFromCriteria(criteria, 'The live proof setup is strong enough for a Claimroom claim.', 'The live proof setup needs clearer capture sources, coverage, saved evidence, or continuity.');
+  return buildReviewFromCriteria(criteria, 'The live proof setup is strong enough for a Klaimd claim.', 'The live proof setup needs clearer capture sources, coverage, saved evidence, or continuity.');
 }
 
 function buildReviewFromCriteria(criteria, passSummary, failSummary) {
@@ -528,7 +528,7 @@ function getValidatorMessages(claim, section) {
     {
       role: 'system',
       content:
-        `You review Claimroom ${sectionLabel} for an AI-assisted verification platform. Return strict JSON with claimable boolean, score 0-100, verdict, summary, criteria array, suggestions array. Each criteria item must have name, passed, reason, suggestion. A Claimroom setup is claimable only if it is specific, durable, provable, and constrained to the claim window. For proof rules and live setup, focus on evidence quality, saved artifacts, AI-verifier confidence, live-start integrity, metadata/timestamps/GPS/transcripts where useful, and whether the outcome can be independently checked. Reject vague wording that requires trusting the claimer without live, timestamped, recorded, GPS, metadata, witness, public, AI-reviewable, or independently checkable evidence.`,
+        `You review Klaimd ${sectionLabel} for an AI-assisted verification platform. Return strict JSON with claimable boolean, score 0-100, verdict, summary, criteria array, suggestions array. Each criteria item must have name, passed, reason, suggestion. A Klaimd setup is claimable only if it is specific, durable, provable, and constrained to the claim window. For proof rules and live setup, focus on evidence quality, saved artifacts, AI-verifier confidence, live-start integrity, metadata/timestamps/GPS/transcripts where useful, and whether the outcome can be independently checked. Reject vague wording that requires trusting the claimer without live, timestamped, recorded, GPS, metadata, witness, public, AI-reviewable, or independently checkable evidence.`,
     },
     {
       role: 'user',

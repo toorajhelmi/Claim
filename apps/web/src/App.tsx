@@ -428,7 +428,7 @@ function HomePage() {
   }, []);
 
   if (loading) {
-    return <LoadingPage label="Loading Claimroom home..." />;
+    return <LoadingPage label="Loading Klaimd home..." />;
   }
 
   if (!userId) {
@@ -440,8 +440,8 @@ function HomePage() {
       <main className="app-page section-shell">
         <section className="dashboard-hero">
           <div>
-            <p className="eyebrow">Claimroom home</p>
-            <h1 className="page-title">Your claim room.</h1>
+            <p className="eyebrow">Klaimd home</p>
+            <h1 className="page-title">Your goal room.</h1>
             <p className="page-lede">
               Continue drafting your claims, activate proof setup, or back claims that are already open.
             </p>
@@ -982,7 +982,7 @@ function AuthPage({ nextPath }: { nextPath: string }) {
     }
 
     setStatus('success');
-    setMessage('Confirmation email sent through Claimroom. Check inbox and spam/promotions.');
+    setMessage('Confirmation email sent through Klaimd. Check inbox and spam/promotions.');
     setConfirmationEmail(values.email.trim());
     setAuthStage('check-email');
   }
@@ -1827,7 +1827,7 @@ function ClaimabilityPanel({
     return (
       <div className="claimability-panel muted">
         <p>
-          Claimroom will review this {label.toLowerCase()} for durability, proof quality,
+          Klaimd will review this {label.toLowerCase()} for durability, proof quality,
           and whether it can be tied to the claim window.
         </p>
       </div>
@@ -2028,7 +2028,7 @@ function createActivationSetupState(
 }
 
 function getActivationSetupStorageKey(claimId: string) {
-  return `claimroom.activationSetup.${claimId}`;
+  return `klaimd.activationSetup.${claimId}`;
 }
 
 function readStoredActivationSetup(claimId: string, fallback: ActivationSetupState) {
@@ -3031,7 +3031,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                 {isOwner ? (
                   <form className="compact-form invite-supporters-form" onSubmit={handleInviteSupporters}>
                     <p className="form-message">
-                      Invite supporters to pledge. Claimroom will email each person a link to this claim page with
+                      Invite supporters to pledge. Klaimd will email each person a link to this claim page with
                       the share message and pledge context.
                     </p>
                     <label>

@@ -74,7 +74,7 @@ function buildRecorderEmailHtml({ appName, claim, claimUrl, inviteUrl, invite })
           </p>
         </div>
         <div style="padding:20px 28px;border-top:1px solid rgba(255,255,255,0.1);color:#8d96a8;font-size:13px;line-height:1.6">
-          Claimroom keeps recorder instructions, live proof access, and evidence context in one place.
+          Klaimd keeps recorder instructions, live proof access, and evidence context in one place.
         </div>
       </div>
     </div>
@@ -231,8 +231,8 @@ module.exports = async function handler(request, response) {
 
   const emailResult = await sendRecorderEmails({
     resendApiKey: process.env.RESEND_API_KEY,
-    fromEmail: process.env.RESEND_FROM_EMAIL || 'Claimroom <onboarding@resend.dev>',
-    appName: process.env.VITE_APP_NAME || 'Claimroom',
+    fromEmail: process.env.RESEND_FROM_EMAIL || 'Klaimd <onboarding@resend.dev>',
+    appName: process.env.VITE_APP_NAME || 'Klaimd',
     origin,
     claim,
     invites: invites ?? [],

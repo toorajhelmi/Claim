@@ -86,7 +86,7 @@ function buildSupporterInviteHtml({ appName, claim, claimUrl }) {
           </p>
         </div>
         <div style="padding:20px 28px;border-top:1px solid rgba(255,255,255,0.1);color:#8d96a8;font-size:13px;line-height:1.6">
-          Claimroom keeps the pledge context, proof setup, and live updates in one place.
+          Klaimd keeps the pledge context, proof setup, and live updates in one place.
         </div>
       </div>
     </div>
@@ -117,8 +117,8 @@ module.exports = async function handler(request, response) {
   const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_JWT || process.env.SUPABASE_SECRET_KEY;
   const resendApiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.RESEND_FROM_EMAIL || 'Claimroom <onboarding@resend.dev>';
-  const appName = process.env.VITE_APP_NAME || 'Claimroom';
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'Klaimd <onboarding@resend.dev>';
+  const appName = process.env.VITE_APP_NAME || 'Klaimd';
   const origin = getOrigin(request);
 
   if (!supabaseUrl || !publishableKey || !serviceRoleKey) {

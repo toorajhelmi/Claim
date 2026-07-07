@@ -86,7 +86,7 @@ async function refineWithOpenAi(body, fallback) {
           {
             role: 'system',
             content:
-              'You lightly copy-edit Claimroom draft answers. Return strict JSON with title, description, proofRules, liveSetup, and supporterInteraction strings. Preserve all user-provided facts exactly: do not add dates, distances, places, names, devices, proof mechanisms, deadlines, measurements, legal claims, or new requirements. Fix typos, punctuation, capitalization, grammar, duplicated spaces, and sentence flow only. Keep future-tense commitment language. Keep proofRules as separate lines when possible. If a field is blank, return it blank.',
+              'You lightly copy-edit Klaimd draft answers. Return strict JSON with title, description, proofRules, liveSetup, and supporterInteraction strings. Preserve all user-provided facts exactly: do not add dates, distances, places, names, devices, proof mechanisms, deadlines, measurements, legal claims, or new requirements. Fix typos, punctuation, capitalization, grammar, duplicated spaces, and sentence flow only. Keep future-tense commitment language. Keep proofRules as separate lines when possible. If a field is blank, return it blank.',
           },
           {
             role: 'user',
