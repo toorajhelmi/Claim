@@ -1989,21 +1989,70 @@ function inferRecorderSetup(claim: Claim, proofRules: ProofRule[]) {
   };
 }
 
-function createActivationSetupState(claim: Claim, recorderSuggestion: ReturnType<typeof inferRecorderSetup>): ActivationSetupState {
+function createActivationSetupState(
+  claim: Claim,
+  recorderSuggestion: ReturnType<typeof inferRecorderSetup>,
+  recorderInvites: RecorderInvite[] = [],
+): ActivationSetupState {
+  const selfInvite = recorderInvites.find(
+    (invite) => invite.invitee_contact === claim.contact_email && invite.status !== 'declined',
+  );
+  const otherInvite = recorderInvites.find(
+    (invite) => invite.invitee_contact !== claim.contact_email && invite.status !== 'declined',
+  );
+
   return {
-    selfRecording: recorderSuggestion.selfRecommended,
-    otherRecorder: recorderSuggestion.otherRecommended,
+    selfRecording: recorderSuggestion.selfRecommended || Boolean(selfInvite),
+    otherRecorder: recorderSuggestion.otherRecommended || Boolean(otherInvite),
     externalProof: recorderSuggestion.externalRecommended,
-    selfName: claim.creator_name,
-    selfContact: claim.contact_email ?? '',
-    recorderName: '',
-    recorderContact: '',
-    recorderResponsibilities: recorderSuggestion.responsibilities,
-    payoutSharePercent: '10',
+    selfName: selfInvite?.invitee_name ?? claim.creator_name,
+    selfContact: selfInvite?.invitee_contact ?? claim.contact_email ?? '',
+    recorderName: otherInvite?.invitee_name ?? '',
+    recorderContact: otherInvite?.invitee_contact ?? '',
+    recorderResponsibilities: otherInvite?.responsibilities ?? recorderSuggestion.responsibilities,
+    payoutSharePercent: otherInvite ? String(otherInvite.payout_share_bps / 100) : '10',
     externalProofLabel: '',
     externalProofDetails: '',
     externalProofLink: '',
   };
+}
+
+function getActivationSetupStorageKey(claimId: string) {
+  return `claimroom.activationSetup.${claimId}`;
+}
+
+function readStoredActivationSetup(claimId: string, fallback: ActivationSetupState) {
+  try {
+    const storedValue = window.localStorage.getItem(getActivationSetupStorageKey(claimId));
+
+    if (!storedValue) {
+      return fallback;
+    }
+
+    const storedSetup = JSON.parse(storedValue) as Partial<ActivationSetupState>;
+    return {
+      ...fallback,
+      ...storedSetup,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function saveStoredActivationSetup(claimId: string, setup: ActivationSetupState) {
+  try {
+    window.localStorage.setItem(getActivationSetupStorageKey(claimId), JSON.stringify(setup));
+  } catch {
+    // Persistence is best-effort; activation should still work if storage is blocked.
+  }
+}
+
+function clearStoredActivationSetup(claimId: string) {
+  try {
+    window.localStorage.removeItem(getActivationSetupStorageKey(claimId));
+  } catch {
+    // Ignore storage cleanup errors.
+  }
 }
 
 function buildActivationSetupSummary(setup: ActivationSetupState) {
@@ -2059,8 +2108,15 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     }
 
     const suggestion = inferRecorderSetup(data.claim, data.proofRules);
-    setActivationSetup((currentSetup) => currentSetup ?? createActivationSetupState(data.claim, suggestion));
-  }, [data?.claim.id, data?.claim.status, data?.proofRules.length]);
+    const fallbackSetup = createActivationSetupState(data.claim, suggestion, data.recorderInvites);
+    setActivationSetup((currentSetup) => currentSetup ?? readStoredActivationSetup(data.claim.id, fallbackSetup));
+  }, [data?.claim.id, data?.claim.status, data?.proofRules.length, data?.recorderInvites.length]);
+
+  useEffect(() => {
+    if (data?.claim && data.claim.status !== 'draft') {
+      clearStoredActivationSetup(data.claim.id);
+    }
+  }, [data?.claim.id, data?.claim.status]);
 
   useEffect(() => {
     async function verifyCheckoutReturn() {
@@ -2107,6 +2163,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
       }
 
       setSetupMessage('Payment confirmed. Claim activated and recorder emails sent.');
+      clearStoredActivationSetup(data.claim.id);
       window.history.replaceState(null, '', `/claims/${slug}`);
       await reload();
     }
@@ -2251,13 +2308,27 @@ function ClaimDetailPage({ slug }: { slug: string }) {
       return null;
     }
 
-    return createActivationSetupState(data.claim, recorderSuggestion);
+    const fallbackSetup = createActivationSetupState(data.claim, recorderSuggestion, data.recorderInvites);
+    return readStoredActivationSetup(data.claim.id, fallbackSetup);
   }
 
   function updateActivationSetup(nextState: Partial<ActivationSetupState>) {
     setActivationSetup((currentSetup) => {
-      const baseSetup = currentSetup ?? (data?.claim ? createActivationSetupState(data.claim, inferRecorderSetup(data.claim, data.proofRules)) : null);
-      return baseSetup ? { ...baseSetup, ...nextState } : baseSetup;
+      const baseSetup = currentSetup ?? (
+        data?.claim
+          ? readStoredActivationSetup(
+            data.claim.id,
+            createActivationSetupState(data.claim, inferRecorderSetup(data.claim, data.proofRules), data.recorderInvites),
+          )
+          : null
+      );
+      const updatedSetup = baseSetup ? { ...baseSetup, ...nextState } : baseSetup;
+
+      if (data?.claim && updatedSetup) {
+        saveStoredActivationSetup(data.claim.id, updatedSetup);
+      }
+
+      return updatedSetup;
     });
     setActivationReviews([]);
     setSetupMessage('');
@@ -2385,6 +2456,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
 
     setActivationStatus('checking-out');
     setSetupMessage('Starting secure payment...');
+    saveStoredActivationSetup(data.claim.id, setup);
 
     const { data: sessionData } = await supabase.auth.getSession();
     const response = await fetch('/api/create-activation-checkout', {
@@ -2418,7 +2490,10 @@ function ClaimDetailPage({ slug }: { slug: string }) {
   const recorderSuggestion = inferRecorderSetup(data.claim, data.proofRules);
 
   if (isDraft && isOwner && draftMode === 'activate') {
-    const setup = activationSetup ?? createActivationSetupState(data.claim, recorderSuggestion);
+    const setup = activationSetup ?? readStoredActivationSetup(
+      data.claim.id,
+      createActivationSetupState(data.claim, recorderSuggestion, data.recorderInvites),
+    );
     const allActivationReviewsPassed =
       activationReviews.length > 0 && activationReviews.every(([, review]) => review.claimable);
 
