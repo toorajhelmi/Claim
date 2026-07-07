@@ -2227,16 +2227,15 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     const body = (await response.json().catch(() => null)) as (EmailSendResult & { error?: string }) | null;
 
     if (!response.ok) {
-      setPledgeMessage(body?.error ?? 'Could not send supporter invites.');
+      setPledgeMessage('Supporter invites could not be sent right now. Please retry shortly.');
       return;
     }
 
     const sent = body?.sent ?? emails.length;
     const skipped = body?.skipped ?? 0;
-    const firstError = body?.errors?.[0]?.error;
     setPledgeMessage(
       skipped > 0
-        ? `Sent ${sent} supporter invite${sent === 1 ? '' : 's'}; ${skipped} could not be sent${firstError ? ` (${firstError})` : ''}.`
+        ? `Sent ${sent} supporter invite${sent === 1 ? '' : 's'}; ${skipped} could not be delivered right now.`
         : `Sent ${sent} supporter invite${sent === 1 ? '' : 's'}.`,
     );
     event.currentTarget.reset();
@@ -2540,12 +2539,11 @@ function ClaimDetailPage({ slug }: { slug: string }) {
       const emailResult = body.emailResult;
       const sent = emailResult?.sent ?? 0;
       const skipped = emailResult?.skipped ?? 0;
-      const firstError = emailResult?.errors?.[0]?.error || emailResult?.warning;
 
       clearStoredActivationSetup(data.claim.id);
       setSetupMessage(
         skipped > 0
-          ? `Development payment bypass complete. Claim activated, but ${skipped} recorder email${skipped === 1 ? '' : 's'} could not be sent${firstError ? ` (${firstError})` : ''}.`
+          ? `Development payment bypass complete. Claim activated, but ${skipped} recorder email${skipped === 1 ? '' : 's'} could not be delivered right now.`
           : sent > 0
             ? `Development payment bypass complete. Claim activated and ${sent} recorder email${sent === 1 ? '' : 's'} sent.`
             : 'Development payment bypass complete. Claim activated. No pending recorder email was needed.',
