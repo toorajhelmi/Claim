@@ -109,15 +109,15 @@ async function insertInviteIfMissing(supabaseAdmin, claimId, invite) {
 
 function buildRecorderEmailHtml({ appName, claim, claimUrl, inviteUrl, invite }) {
   return `
-    <div style="font-family:Inter,Arial,sans-serif;background:#05070d;color:#f8fbff;padding:32px">
-      <div style="max-width:620px;margin:0 auto;background:#10141f;border:1px solid rgba(255,255,255,0.12);border-radius:24px;overflow:hidden">
+    <div style="font-family:Inter,Arial,sans-serif;background:#10141f;color:#f8fbff;margin:0;padding:0">
+      <div style="width:100%;max-width:680px;margin:0 auto;background:#10141f;overflow:hidden">
         <div style="padding:24px 28px;background:linear-gradient(135deg,rgba(112,255,139,0.18),rgba(66,221,255,0.14))">
           <div style="display:inline-block;background:#111827;border-radius:999px;padding:8px 12px;font-weight:800">${escapeHtml(appName)}</div>
           <h1 style="margin:18px 0 0;font-size:30px;line-height:1.08">You are invited to support proof for a claim.</h1>
         </div>
         <div style="padding:28px">
           <p style="color:#cbd2df;font-size:16px;line-height:1.6">
-            ${escapeHtml(claim.creator_name)} activated this ${escapeHtml(appName)} claim and listed you as a proof recorder/source.
+            <strong style="color:#70ff8b">${escapeHtml(claim.creator_name)}</strong> activated this ${escapeHtml(appName)} claim and listed you as a proof recorder/source.
           </p>
           <h2 style="font-size:22px;line-height:1.2;margin:18px 0">${escapeHtml(claim.title)}</h2>
           <p style="color:#cbd2df;font-size:16px;line-height:1.6">
@@ -128,12 +128,9 @@ function buildRecorderEmailHtml({ appName, claim, claimUrl, inviteUrl, invite })
               Review recorder instructions
             </a>
           </p>
-          <p style="color:#8d96a8;font-size:13px;line-height:1.6">
-            Claim page: <a href="${claimUrl}" style="color:#70ff8b">${claimUrl}</a>
-          </p>
         </div>
         <div style="padding:20px 28px;border-top:1px solid rgba(255,255,255,0.1);color:#8d96a8;font-size:13px;line-height:1.6">
-          Want to follow the proof live? <a href="${claimUrl}" style="color:#70ff8b;font-weight:800">Join claim</a>
+          Claimroom keeps recorder instructions, live proof access, and evidence context in one place.
         </div>
       </div>
     </div>
@@ -183,7 +180,7 @@ async function sendRecorderEmails({ resendApiKey, fromEmail, appName, origin, cl
       body: JSON.stringify({
         from: fromEmail,
         to: [invite.invitee_contact],
-        subject: `Recorder invite: ${claim.title}`,
+        subject: `${appName} recorder invite`,
         html: buildRecorderEmailHtml({
           appName,
           claim,

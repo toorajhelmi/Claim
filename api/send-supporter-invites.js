@@ -59,16 +59,16 @@ async function getAuthedUser(request, supabaseUrl, publishableKey) {
 
 function buildSupporterInviteHtml({ appName, claim, claimUrl }) {
   return `
-    <div style="font-family:Inter,Arial,sans-serif;background:#05070d;color:#f8fbff;padding:32px">
-      <div style="max-width:620px;margin:0 auto;background:#10141f;border:1px solid rgba(255,255,255,0.12);border-radius:24px;overflow:hidden">
+    <div style="font-family:Inter,Arial,sans-serif;background:#10141f;color:#f8fbff;margin:0;padding:0">
+      <div style="width:100%;max-width:680px;margin:0 auto;background:#10141f;overflow:hidden">
         <div style="padding:24px 28px;background:linear-gradient(135deg,rgba(112,255,139,0.18),rgba(66,221,255,0.14))">
           <div style="display:inline-block;background:#111827;border-radius:999px;padding:8px 12px;font-weight:800">${escapeHtml(appName)}</div>
-          <h1 style="margin:18px 0 0;font-size:30px;line-height:1.08">${escapeHtml(claim.creator_name)} invited you to back a live proof claim.</h1>
+          <h1 style="margin:18px 0 0;font-size:30px;line-height:1.08"><span style="color:#70ff8b">${escapeHtml(claim.creator_name)}</span> invited you to support this goal:</h1>
         </div>
         <div style="padding:28px">
           <h2 style="font-size:22px;line-height:1.2;margin:0 0 18px">${escapeHtml(claim.title)}</h2>
           <p style="color:#cbd2df;font-size:16px;line-height:1.6">
-            This claim is open for backing on ${escapeHtml(appName)}. Supporters can pledge, share the claim,
+            This goal is open for backing on ${escapeHtml(appName)}. Supporters can pledge, share the claim,
             and watch the proof when it goes live.
           </p>
           <p style="color:#cbd2df;font-size:16px;line-height:1.6">
@@ -80,12 +80,13 @@ function buildSupporterInviteHtml({ appName, claim, claimUrl }) {
             </a>
           </p>
           <p style="color:#8d96a8;font-size:13px;line-height:1.6">
-            If the button does not work, copy and paste this link:<br />
-            <span style="word-break:break-all">${claimUrl}</span>
+            Any pledge you make goes to <strong style="color:#f8fbff">${escapeHtml(claim.creator_name)}</strong> if the goal is achieved and verified.
+            If the proof does not verify, you receive a share of ${escapeHtml(claim.creator_name)}'s locked amount of
+            <strong style="color:#f8fbff">${escapeHtml(claim.lockedAmount)}</strong>, or you can choose to donate that share instead.
           </p>
         </div>
         <div style="padding:20px 28px;border-top:1px solid rgba(255,255,255,0.1);color:#8d96a8;font-size:13px;line-height:1.6">
-          Want to follow the proof live? <a href="${claimUrl}" style="color:#70ff8b;font-weight:800">Join claim</a>
+          Claimroom keeps the pledge context, proof setup, and live updates in one place.
         </div>
       </div>
     </div>
@@ -168,7 +169,7 @@ module.exports = async function handler(request, response) {
   });
   const { data: claim, error: claimError } = await supabaseAdmin
     .from('claims')
-    .select('id, slug, creator_id, creator_name, title, pledge_threshold_cents, status')
+    .select('id, slug, creator_id, creator_name, title, pledge_threshold_cents, stake_amount_cents, status')
     .eq('id', claimId)
     .single();
 
@@ -193,6 +194,7 @@ module.exports = async function handler(request, response) {
     claim: {
       ...claim,
       pledgeGoal: formatMoney(claim.pledge_threshold_cents),
+      lockedAmount: formatMoney(claim.stake_amount_cents),
     },
     claimUrl,
   });
@@ -210,7 +212,7 @@ module.exports = async function handler(request, response) {
       body: JSON.stringify({
         from: fromEmail,
         to: [email],
-        subject: `${claim.creator_name} invited you to back a ${appName} claim`,
+        subject: `Support ${claim.creator_name}'s goal`,
         html,
       }),
     });
