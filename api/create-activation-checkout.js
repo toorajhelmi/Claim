@@ -240,7 +240,7 @@ async function activateClaimWithoutStripe({ supabaseAdmin, origin, claim, setupS
 
   const emailResult = await sendRecorderEmails({
     resendApiKey: process.env.RESEND_API_KEY,
-    fromEmail: process.env.RESEND_FROM_EMAIL || 'Klaimd <onboarding@resend.dev>',
+    fromEmail: process.env.RESEND_FROM_EMAIL || 'Klaimd <noreply@send.klaimd.app>',
     appName: process.env.VITE_APP_NAME || 'Klaimd',
     origin,
     claim,

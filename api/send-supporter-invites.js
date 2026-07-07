@@ -117,7 +117,7 @@ module.exports = async function handler(request, response) {
   const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_JWT || process.env.SUPABASE_SECRET_KEY;
   const resendApiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.RESEND_FROM_EMAIL || 'Klaimd <onboarding@resend.dev>';
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'Klaimd <noreply@send.klaimd.app>';
   const appName = process.env.VITE_APP_NAME || 'Klaimd';
   const origin = getOrigin(request);
 

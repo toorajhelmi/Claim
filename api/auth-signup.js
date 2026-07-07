@@ -59,7 +59,7 @@ module.exports = async function handler(request, response) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_JWT || process.env.SUPABASE_SECRET_KEY;
   const resendApiKey = process.env.RESEND_API_KEY;
   const appName = process.env.VITE_APP_NAME || 'Klaimd';
-  const fromEmail = process.env.RESEND_FROM_EMAIL || 'Klaimd <onboarding@resend.dev>';
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'Klaimd <noreply@send.klaimd.app>';
 
   if (!supabaseUrl || !serviceRoleKey || !resendApiKey) {
     json(response, 500, { error: 'Server email configuration is incomplete' });
