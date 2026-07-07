@@ -2604,7 +2604,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                           <input
                             value={setup.externalProofLabel}
                             onChange={(event) => updateActivationSetup({ externalProofLabel: event.target.value })}
-                            placeholder="GPS app, public feed, transcript, venue feed..."
+                            placeholder="GPS app, public feed, transcript..."
                           />
                         </label>
                         <label>
@@ -2691,10 +2691,30 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                 <p className="eyebrow">Payment</p>
                 <h2>Pay to activate.</h2>
                 <p className="form-message">
-                  We will open a secure Stripe checkout. If the charge does not go through, return here and retry.
-                  Once payment is confirmed, the claim opens for backing and recorder emails are sent.
+                  We will open a secure Stripe checkout. Once payment is confirmed, the claim opens for backing and
+                  recorder emails are sent.
                 </p>
-                <Metric label="Activation charge" value={formatMoney(data.claim.stake_amount_cents)} />
+                <Metric label="Locked amount" value={formatMoney(data.claim.stake_amount_cents)} />
+                <div className="payment-rules">
+                  <strong>Locked amount rules</strong>
+                  <ul>
+                    <li>
+                      If supporter pledges minus platform fees are below the locked amount by the event date,
+                      the claimer can cancel and receive the locked amount back.
+                    </li>
+                    <li>
+                      If the event is attempted but cannot be verified, or does not fulfill the promised claim,
+                      the locked amount is distributed to supporters after platform fees.
+                    </li>
+                    <li>
+                      If the event is executed and verified, the locked amount is released to the claimer.
+                    </li>
+                  </ul>
+                  <p>
+                    Platform fees can vary from 5% to 10% of pledged or locked funds depending on the outcome rules.
+                    The exact fee depends on the pledge amount, locked amount, and final verification result.
+                  </p>
+                </div>
                 <div className="action-row">
                   <button
                     className="button button-primary"
