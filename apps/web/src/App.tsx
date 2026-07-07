@@ -2487,7 +2487,9 @@ function ClaimDetailPage({ slug }: { slug: string }) {
       return;
     }
 
-    window.location.href = body.url;
+    if (body.url) {
+      window.location.href = body.url;
+    }
   }
 
   if (loading) return <LoadingPage label="Loading claim..." />;
