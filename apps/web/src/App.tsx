@@ -238,6 +238,7 @@ type LiveRoomTile = {
   role: LiveViewerRole | string;
   isLocal: boolean;
   facingMode?: 'user' | 'environment';
+  hideVideo?: boolean;
   videoTrack?: LocalVideoTrack | RemoteVideoTrack;
   audioTrack?: RemoteAudioTrack;
 };
@@ -3103,6 +3104,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
 function ClaimLivePage({ slug }: { slug: string }) {
   const { data, loading, error } = useClaimBundle(slug);
   const [viewerRole, setViewerRole] = useState<LiveViewerRole>('supporter');
+  const [liveStageActive, setLiveStageActive] = useState(false);
 
   useEffect(() => {
     async function loadViewerRole() {
@@ -3143,14 +3145,14 @@ function ClaimLivePage({ slug }: { slug: string }) {
 
   return (
     <AppChrome>
-      <main className="app-page section-shell">
-        <ClaimHeader claim={data.claim} label="LIVE ROOM" />
+      <main className={`app-page section-shell ${liveStageActive ? 'live-stage-page' : ''}`}>
+        {!liveStageActive ? <ClaimHeader claim={data.claim} label="LIVE ROOM" /> : null}
         <div className="mvp-layout live-layout">
-          <section className="mvp-panel live-video-panel">
-            <p className="eyebrow">Room preview</p>
-            <LiveRoomPreview claim={data.claim} viewerRole={viewerRole} />
+          <section className={`mvp-panel live-video-panel ${liveStageActive ? 'live-video-panel-active' : ''}`}>
+            {!liveStageActive ? <p className="eyebrow">Room preview</p> : null}
+            <LiveRoomPreview claim={data.claim} onConnectionChange={setLiveStageActive} viewerRole={viewerRole} />
           </section>
-          <aside className="mvp-panel live-room-sidebar">
+          {!liveStageActive ? <aside className="mvp-panel live-room-sidebar">
             <p className="eyebrow">Your access</p>
             <Metric label="Signed in as" value={viewerRoleLabel} />
             <p>
@@ -3171,9 +3173,9 @@ function ClaimLivePage({ slug }: { slug: string }) {
                 <span>Supporter chat and reactions should appear without giving supporters camera access.</span>
               </div>
             </div>
-          </aside>
+          </aside> : null}
         </div>
-        <section className="mvp-panel">
+        {!liveStageActive ? <section className="mvp-panel">
           <p className="eyebrow">Evidence lane ideas</p>
           <div className="live-room-card-list evidence-card-list">
             <div className="live-room-card">
@@ -3189,8 +3191,8 @@ function ClaimLivePage({ slug }: { slug: string }) {
               <span>Timestamped proof code, supporter-selected constraints, location check-ins, and before/after state captures.</span>
             </div>
           </div>
-        </section>
-        <Timeline events={data.proofEvents} checkins={data.checkins} />
+        </section> : null}
+        {!liveStageActive ? <Timeline events={data.proofEvents} checkins={data.checkins} /> : null}
       </main>
     </AppChrome>
   );
@@ -3306,9 +3308,11 @@ function ClaimStatementPreview({
 
 function LiveRoomPreview({
   claim,
+  onConnectionChange,
   viewerRole,
 }: {
   claim: Claim;
+  onConnectionChange?: (connected: boolean) => void;
   viewerRole: LiveViewerRole;
 }) {
   const canStream = viewerRole === 'claimer' || viewerRole === 'recorder';
@@ -3319,16 +3323,21 @@ function LiveRoomPreview({
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
   const cameraFacingModeRef = useRef<'user' | 'environment'>('user');
+  const selectedCameraDeviceIdRef = useRef<string | null>(null);
   const [switchingCamera, setSwitchingCamera] = useState(false);
+  const [hideLocalPreview, setHideLocalPreview] = useState(false);
+  const hideLocalPreviewRef = useRef(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [micOn, setMicOn] = useState(false);
   const [roomMessage, setRoomMessage] = useState('');
 
   useEffect(() => {
     return () => {
+      onConnectionChange?.(false);
       roomRef.current?.disconnect();
       roomRef.current = null;
     };
-  }, []);
+  }, [onConnectionChange]);
 
   async function requestTestRoomToken() {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -3363,17 +3372,53 @@ function LiveRoomPreview({
   }
 
   function refreshTiles(room: Room) {
-    setTiles(collectLiveRoomTiles(room, cameraFacingModeRef.current));
+    setTiles(collectLiveRoomTiles(room, cameraFacingModeRef.current, hideLocalPreviewRef.current));
   }
 
-  async function enableCamera(room: Room, facingMode: 'user' | 'environment') {
-    await room.localParticipant.setCameraEnabled(true, {
-      facingMode,
-    });
+  async function enableCamera({
+    room,
+    facingMode,
+    deviceId,
+  }: {
+    room: Room;
+    facingMode: 'user' | 'environment';
+    deviceId?: string;
+  }) {
+    await room.localParticipant.setCameraEnabled(true, deviceId ? { deviceId } : { facingMode });
     setCameraOn(true);
     setCameraFacingMode(facingMode);
     cameraFacingModeRef.current = facingMode;
-    setTiles(collectLiveRoomTiles(room, facingMode));
+    const activeDeviceId = getLocalCameraDeviceId(room);
+    selectedCameraDeviceIdRef.current = activeDeviceId ?? deviceId ?? null;
+    setTiles(collectLiveRoomTiles(room, facingMode, hideLocalPreviewRef.current));
+  }
+
+  async function getVideoInputDevices() {
+    if (!navigator.mediaDevices?.enumerateDevices) return [];
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter((device) => device.kind === 'videoinput');
+  }
+
+  function chooseNextCameraDevice({
+    devices,
+    currentDeviceId,
+    nextFacingMode,
+  }: {
+    devices: MediaDeviceInfo[];
+    currentDeviceId: string | null;
+    nextFacingMode: 'user' | 'environment';
+  }) {
+    const otherDevices = devices.filter((device) => device.deviceId && device.deviceId !== currentDeviceId);
+
+    if (otherDevices.length === 0) return null;
+
+    const labelPattern = nextFacingMode === 'environment'
+      ? /back|rear|environment|wide|tele/i
+      : /front|user|face/i;
+    const labelMatch = otherDevices.find((device) => labelPattern.test(device.label));
+
+    return labelMatch?.deviceId ?? otherDevices[0]?.deviceId ?? null;
   }
 
   async function startPrivateTestRoom() {
@@ -3404,6 +3449,7 @@ function LiveRoomPreview({
       });
       room.on(RoomEvent.Disconnected, () => {
         setConnectionState('idle');
+        onConnectionChange?.(false);
         setCameraOn(false);
         setSwitchingCamera(false);
         setMicOn(false);
@@ -3413,18 +3459,20 @@ function LiveRoomPreview({
       await room.connect(livekitToken.livekitUrl, livekitToken.token);
 
       if (livekitToken.canPublish) {
-        await enableCamera(room, cameraFacingMode);
+        await enableCamera({ room, facingMode: cameraFacingMode });
         await room.localParticipant.setMicrophoneEnabled(true);
         setMicOn(true);
       }
 
       setConnectionState('connected');
+      onConnectionChange?.(true);
       refreshTiles(room);
-      setRoomMessage(`Private test room connected as ${livekitToken.displayName}.`);
+      setRoomMessage('');
     } catch (startError) {
       roomRef.current?.disconnect();
       roomRef.current = null;
       setConnectionState('error');
+      onConnectionChange?.(false);
       setCameraOn(false);
       setMicOn(false);
       setTiles([]);
@@ -3438,7 +3486,7 @@ function LiveRoomPreview({
     const nextCameraState = !cameraOn;
 
     if (nextCameraState) {
-      await enableCamera(room, cameraFacingMode);
+      await enableCamera({ room, facingMode: cameraFacingMode });
     } else {
       await room.localParticipant.setCameraEnabled(false);
       setCameraOn(false);
@@ -3451,18 +3499,27 @@ function LiveRoomPreview({
     if (!room || !tokenDetails?.canPublish) return;
     const nextFacingMode = cameraFacingMode === 'user' ? 'environment' : 'user';
     const previousFacingMode = cameraFacingMode;
+    const previousDeviceId = selectedCameraDeviceIdRef.current;
 
     setSwitchingCamera(true);
     try {
+      const devices = await getVideoInputDevices();
+      const currentDeviceId = getLocalCameraDeviceId(room) ?? selectedCameraDeviceIdRef.current;
+      const nextDeviceId = chooseNextCameraDevice({
+        devices,
+        currentDeviceId,
+        nextFacingMode,
+      });
+
       await room.localParticipant.setCameraEnabled(false);
       setCameraOn(false);
       refreshTiles(room);
       await new Promise((resolve) => window.setTimeout(resolve, 120));
-      await enableCamera(room, nextFacingMode);
-      setRoomMessage(nextFacingMode === 'environment' ? 'Back camera selected.' : 'Front camera selected.');
+      await enableCamera({ room, facingMode: nextFacingMode, deviceId: nextDeviceId ?? undefined });
+      setRoomMessage('');
     } catch (cameraError) {
       try {
-        await enableCamera(room, previousFacingMode);
+        await enableCamera({ room, facingMode: previousFacingMode, deviceId: previousDeviceId ?? undefined });
       } catch {
         setCameraOn(false);
         refreshTiles(room);
@@ -3490,7 +3547,9 @@ function LiveRoomPreview({
     roomRef.current?.disconnect();
     roomRef.current = null;
     setConnectionState('idle');
+    onConnectionChange?.(false);
     setCameraOn(false);
+    selectedCameraDeviceIdRef.current = null;
     setSwitchingCamera(false);
     setMicOn(false);
     setTiles([]);
@@ -3499,6 +3558,17 @@ function LiveRoomPreview({
 
   const isConnected = connectionState === 'connected';
   const isConnecting = connectionState === 'connecting';
+
+  function toggleLocalPreview() {
+    const nextHiddenState = !hideLocalPreview;
+    setHideLocalPreview(nextHiddenState);
+    hideLocalPreviewRef.current = nextHiddenState;
+    const room = roomRef.current;
+
+    if (room) {
+      setTiles(collectLiveRoomTiles(room, cameraFacingModeRef.current, nextHiddenState));
+    }
+  }
 
   return (
     <div className="livekit-panel">
@@ -3515,6 +3585,43 @@ function LiveRoomPreview({
               />
             ))}
           </div>
+          {roomMessage ? <p className="live-room-toast">{roomMessage}</p> : null}
+          <div className="live-overlay-controls" aria-label="Live room controls">
+            <IconButton
+              active={!hideLocalPreview}
+              label={hideLocalPreview ? 'Show local video preview' : 'Hide local video preview'}
+              onClick={toggleLocalPreview}
+              type="preview"
+            />
+            <IconButton
+              active={cameraOn}
+              label={cameraOn ? 'Turn camera off' : 'Turn camera on'}
+              onClick={toggleCamera}
+              type="camera"
+            />
+            <IconButton
+              active={micOn}
+              label={micOn ? 'Mute mic' : 'Unmute mic'}
+              onClick={toggleMic}
+              type="mic"
+            />
+            <IconButton
+              active={chatOpen}
+              label={chatOpen ? 'Hide chat' : 'Show chat'}
+              onClick={() => setChatOpen((current) => !current)}
+              type="chat"
+            />
+            <IconButton label="Leave test room" onClick={leavePrivateTestRoom} tone="danger" type="leave" />
+          </div>
+          {chatOpen ? (
+            <div className="live-chat-overlay">
+              <div className="live-chat-messages">
+                <p><strong>Klaimd</strong> Chat overlay is ready for the next live-room slice.</p>
+                <p>Messages will float here while the video keeps streaming.</p>
+              </div>
+              <input aria-label="Chat message" disabled placeholder="Chat sending comes next" />
+            </div>
+          ) : null}
         </div>
       ) : (
         <ClaimStatementPreview
@@ -3527,53 +3634,36 @@ function LiveRoomPreview({
           }
         />
       )}
-      <div className="live-room-controls">
-        {canStream ? (
-          <>
-            {!isConnected ? (
+      {!isConnected ? (
+        <>
+          <div className="live-room-controls">
+            {canStream ? (
               <button className="button button-primary" type="button" onClick={startPrivateTestRoom} disabled={isConnecting}>
                 {isConnecting ? 'Opening test room...' : 'Start private test room'}
               </button>
             ) : (
-              <>
-                <button className="button button-secondary" type="button" onClick={toggleCamera}>
-                  {cameraOn ? 'Turn camera off' : 'Turn camera on'}
-                </button>
-                <button className="button button-secondary" type="button" onClick={toggleMic}>
-                  {micOn ? 'Mute mic' : 'Unmute mic'}
-                </button>
-                <button className="button button-ghost" type="button" onClick={leavePrivateTestRoom}>
-                  Leave test room
-                </button>
-              </>
+              <p className="form-message">
+                Private test rooms are limited to the claimer and accepted recorders. Official supporter viewing comes next.
+              </p>
             )}
-          </>
-        ) : (
-          <p className="form-message">
-            Private test rooms are limited to the claimer and accepted recorders. Official supporter viewing comes next.
-          </p>
-        )}
-      </div>
-      {roomMessage ? <p className={`form-message ${connectionState === 'error' ? 'form-message-error' : ''}`}>{roomMessage}</p> : null}
-      <div className="live-room-state-grid">
-        <div>
-          <strong>Room mode</strong>
-          <span>{isConnected ? 'Private test' : 'Setup'}</span>
         </div>
-        <div>
-          <strong>Camera</strong>
-          <span>{canStream ? (cameraOn ? `Publishing ${cameraFacingMode === 'environment' ? 'back' : 'front'}` : 'Ready') : 'Viewer only'}</span>
-        </div>
-        <div>
-          <strong>Stream</strong>
-          <span>{isConnected ? 'Test connected' : 'Not started'}</span>
-        </div>
-      </div>
+          {roomMessage ? <p className={`form-message ${connectionState === 'error' ? 'form-message-error' : ''}`}>{roomMessage}</p> : null}
+        </>
+      ) : null}
     </div>
   );
 }
 
-function collectLiveRoomTiles(room: Room, localFacingMode: 'user' | 'environment'): LiveRoomTile[] {
+function getLocalCameraDeviceId(room: Room) {
+  const localVideoPublication = room.localParticipant.getTrackPublication(Track.Source.Camera);
+  const localVideoTrack = localVideoPublication?.videoTrack instanceof LocalVideoTrack
+    ? localVideoPublication.videoTrack
+    : undefined;
+
+  return localVideoTrack?.mediaStreamTrack.getSettings().deviceId ?? null;
+}
+
+function collectLiveRoomTiles(room: Room, localFacingMode: 'user' | 'environment', hideLocalPreview: boolean): LiveRoomTile[] {
   const localVideoPublication = room.localParticipant.getTrackPublication(Track.Source.Camera);
   const localVideoTrack = localVideoPublication?.videoTrack instanceof LocalVideoTrack
     ? localVideoPublication.videoTrack
@@ -3585,6 +3675,7 @@ function collectLiveRoomTiles(room: Room, localFacingMode: 'user' | 'environment
     role: localRole,
     isLocal: true,
     facingMode: localFacingMode,
+    hideVideo: hideLocalPreview,
     videoTrack: localVideoTrack,
   }];
 
@@ -3639,7 +3730,7 @@ function LiveMediaTile({
     return () => {
       track.detach(videoElement);
     };
-  }, [tile.videoTrack, tile.isLocal]);
+  }, [tile.videoTrack, tile.isLocal, tile.hideVideo]);
 
   useEffect(() => {
     const audioElement = audioRef.current;
@@ -3657,7 +3748,7 @@ function LiveMediaTile({
 
   return (
     <div className="live-media-tile">
-      {tile.videoTrack ? (
+      {tile.videoTrack && !tile.hideVideo ? (
         <video
           ref={videoRef}
           autoPlay
@@ -3668,7 +3759,7 @@ function LiveMediaTile({
       ) : (
         <div className="live-media-placeholder">
           <span>{tile.participantName.slice(0, 1).toUpperCase()}</span>
-          <p>Camera off</p>
+          <p>{tile.hideVideo ? 'Preview hidden' : 'Camera off'}</p>
         </div>
       )}
       {tile.audioTrack ? <audio ref={audioRef} autoPlay /> : null}
@@ -3693,6 +3784,80 @@ function LiveMediaTile({
         <span>{String(tile.role).replace('-', ' ')}</span>
       </div>
     </div>
+  );
+}
+
+function IconButton({
+  active = false,
+  disabled = false,
+  label,
+  onClick,
+  tone,
+  type,
+}: {
+  active?: boolean;
+  disabled?: boolean;
+  label: string;
+  onClick: () => void;
+  tone?: 'danger';
+  type: 'camera' | 'chat' | 'leave' | 'mic' | 'preview';
+}) {
+  return (
+    <button
+      aria-label={label}
+      className={`live-icon-button ${active ? 'is-active' : ''} ${tone === 'danger' ? 'is-danger' : ''}`}
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
+    >
+      <IconGlyph type={type} />
+    </button>
+  );
+}
+
+function IconGlyph({ type }: { type: 'camera' | 'chat' | 'leave' | 'mic' | 'preview' }) {
+  if (type === 'camera') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M5 8.5h8.7l1.8-2h2.8c.9 0 1.7.8 1.7 1.7v8.6c0 .9-.8 1.7-1.7 1.7H5c-.9 0-1.7-.8-1.7-1.7V10.2c0-.9.8-1.7 1.7-1.7Z" />
+        <circle cx="11.5" cy="13.5" r="3.2" />
+      </svg>
+    );
+  }
+
+  if (type === 'chat') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M5 5.7h14c.9 0 1.7.8 1.7 1.7v7.8c0 .9-.8 1.7-1.7 1.7h-7l-4.6 3v-3H5c-.9 0-1.7-.8-1.7-1.7V7.4c0-.9.8-1.7 1.7-1.7Z" />
+      </svg>
+    );
+  }
+
+  if (type === 'leave') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M8.5 5.5h-2A1.5 1.5 0 0 0 5 7v10a1.5 1.5 0 0 0 1.5 1.5h2" />
+        <path d="M13 8l4 4-4 4" />
+        <path d="M17 12H8.5" />
+      </svg>
+    );
+  }
+
+  if (type === 'mic') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M12 14.5a3 3 0 0 0 3-3V6.8a3 3 0 0 0-6 0v4.7a3 3 0 0 0 3 3Z" />
+        <path d="M6.8 11.5a5.2 5.2 0 0 0 10.4 0" />
+        <path d="M12 16.7v3.1" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M2.8 12s3.4-6 9.2-6 9.2 6 9.2 6-3.4 6-9.2 6-9.2-6-9.2-6Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
   );
 }
 
