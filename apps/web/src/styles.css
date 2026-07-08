@@ -1336,6 +1336,17 @@ h3 {
   line-height: 1.45;
 }
 
+.claim-title-effect {
+  color: #fff;
+  text-shadow:
+    0 0 26px rgba(112, 255, 139, 0.18),
+    0 0 42px rgba(66, 221, 255, 0.12);
+  background: linear-gradient(90deg, #fff, rgba(112, 255, 139, 0.92), rgba(66, 221, 255, 0.9));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 .mvp-form,
 .compact-form,
 .mvp-panel,
@@ -2336,6 +2347,45 @@ h3 {
   min-height: 21rem;
 }
 
+.live-room-state-grid,
+.live-room-card-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.live-room-state-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.live-room-state-grid div,
+.live-room-card {
+  padding: 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 1.15rem;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.live-room-state-grid strong,
+.live-room-card strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.live-room-state-grid span,
+.live-room-card span {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.live-room-sidebar .metric-card {
+  margin-bottom: 1rem;
+}
+
+.evidence-card-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .timeline-panel {
   margin-top: 1rem;
 }
@@ -2366,7 +2416,9 @@ h3 {
   .live-layout,
   .form-grid,
   .type-toggle,
-  .setup-option-grid {
+  .setup-option-grid,
+  .live-room-state-grid,
+  .evidence-card-list {
     grid-template-columns: 1fr;
   }
 

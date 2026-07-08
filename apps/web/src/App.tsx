@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { ReactNode } from 'react';
-import { Room, RoomEvent } from 'livekit-client';
 import { appConfig } from './lib/app-config';
 import { supabase } from './lib/supabase';
 
@@ -501,7 +500,7 @@ function ClaimCardList({
       {claims.map((claim) => (
         <a className="claim-card-row" href={`/claims/${claim.slug}`} key={claim.id}>
           <span>{claim.status.replace(/_/g, ' ')}</span>
-          <strong>{claim.title}</strong>
+          <strong className="claim-title-effect">{claim.title}</strong>
           <small>
             {ownerView && claim.status === 'draft'
               ? 'Draft - review when ready'
@@ -703,7 +702,7 @@ function LandingPage() {
                   </span>
                   <span>{claim.meta}</span>
                 </div>
-                <h3>{claim.title}</h3>
+                <h3 className="claim-title-effect">{claim.title}</h3>
                 <p>{claim.proof}</p>
                 <div className="money-line">
                   <strong>{claim.money}</strong>
@@ -2956,7 +2955,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
               <div className="mvp-layout">
                 <section className="mvp-panel draft-preview-panel">
                   <p className="eyebrow">Claim preview</p>
-                  <h2>{data.claim.title}</h2>
+                  <h2 className="claim-title-effect">{data.claim.title}</h2>
                   {data.claim.description ? <p>{data.claim.description}</p> : null}
                   <ProofRules rules={data.proofRules} />
                 </section>
@@ -2998,7 +2997,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
         <div className="mvp-layout">
           <section className="mvp-panel">
             <p className="eyebrow">Preview page</p>
-            <h2>{data.claim.title}</h2>
+            <h2 className="claim-title-effect">{data.claim.title}</h2>
             <p>{data.claim.description}</p>
             {isDraft ? (
               <p className="form-message">
@@ -3073,93 +3072,95 @@ function ClaimDetailPage({ slug }: { slug: string }) {
 }
 
 function ClaimLivePage({ slug }: { slug: string }) {
-  const { data, loading, error, reload } = useClaimBundle(slug);
-  const [eventMessage, setEventMessage] = useState('');
+  const { data, loading, error } = useClaimBundle(slug);
+  const [viewerRole, setViewerRole] = useState<'claimer' | 'recorder' | 'supporter'>('supporter');
 
-  async function addProofEvent(eventType: string, title: string) {
-    if (!data) return;
-    const { error: insertError } = await supabase.from('claim_proof_events').insert({
-      claim_id: data.claim.id,
-      event_type: eventType,
-      title,
-      source_role: 'claimer',
-      source_name: data.claim.creator_name,
-    });
-    setEventMessage(insertError ? insertError.message : `${title} logged.`);
-    if (!insertError) await reload();
-  }
+  useEffect(() => {
+    async function loadViewerRole() {
+      if (!data) return;
 
-  async function submitDirection(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const direction = String(formData.get('direction') || '').trim();
-    if (!data || !direction) return;
-    const { error: inputError } = await supabase.from('claim_supporter_inputs').insert({
-      claim_id: data.claim.id,
-      supporter_name: 'Live supporter',
-      input_type: 'direction',
-      content: direction,
-    });
-    setEventMessage(inputError ? inputError.message : 'Supporter direction logged.');
-    if (!inputError) event.currentTarget.reset();
-    if (!inputError) await reload();
-  }
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData.user;
 
-  async function submitCheckin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const checkin = String(formData.get('checkin') || '').trim();
-    if (!data || !checkin) return;
-    const { error: checkinError } = await supabase.from('claim_checkins').insert({
-      claim_id: data.claim.id,
-      label: checkin,
-      notes: 'Manual MVP check-in from live room.',
-    });
-    setEventMessage(checkinError ? checkinError.message : 'Check-in logged.');
-    if (!checkinError) event.currentTarget.reset();
-    if (!checkinError) await reload();
-  }
+      if (!user) {
+        setViewerRole('supporter');
+        return;
+      }
+
+      if (user.id === data.claim.creator_id) {
+        setViewerRole('claimer');
+        return;
+      }
+
+      const userEmail = user.email?.toLowerCase();
+      const recorderInvite = data.recorderInvites.find(
+        (invite) => userEmail && invite.invitee_contact?.toLowerCase() === userEmail,
+      );
+
+      setViewerRole(recorderInvite ? 'recorder' : 'supporter');
+    }
+
+    void loadViewerRole();
+  }, [data]);
 
   if (loading) return <LoadingPage label="Opening live room..." />;
   if (error || !data) return <ErrorPage message={error ?? 'Claim not found.'} />;
 
+  const viewerRoleLabel = viewerRole === 'claimer'
+    ? 'Claimer'
+    : viewerRole === 'recorder'
+      ? 'Recorder'
+      : 'Supporter / viewer';
+
   return (
     <AppChrome>
       <main className="app-page section-shell">
-        <ClaimHeader claim={data.claim} />
+        <ClaimHeader claim={data.claim} label="LIVE ROOM" />
         <div className="mvp-layout live-layout">
           <section className="mvp-panel live-video-panel">
-            <p className="eyebrow">Claim live room</p>
-            <LiveKitJoinPanel claim={data.claim} />
+            <p className="eyebrow">Room preview</p>
+            <LiveRoomPreview claim={data.claim} viewerRole={viewerRole} />
           </section>
-          <aside className="mvp-panel">
-            <p className="eyebrow">Proof controls</p>
-            <div className="action-grid">
-              <button className="button button-ghost" type="button" onClick={() => addProofEvent('live_room_opened', 'Live room opened')}>
-                Log room opened
-              </button>
-              <button className="button button-ghost" type="button" onClick={() => addProofEvent('proof_code_shown', 'Proof code shown on stream')}>
-                Log proof code shown
-              </button>
-              <button className="button button-ghost" type="button" onClick={() => addProofEvent('attempt_started', 'Attempt started')}>
-                Log attempt start
-              </button>
+          <aside className="mvp-panel live-room-sidebar">
+            <p className="eyebrow">Your access</p>
+            <Metric label="Signed in as" value={viewerRoleLabel} />
+            <p>
+              Klaimd will use the signed-in claimer account or accepted recorder invite to decide who can
+              stream. No manual name or role form should be needed here.
+            </p>
+            <div className="live-room-card-list">
+              <div className="live-room-card">
+                <strong>Test run</strong>
+                <span>Claimer and recorders should be able to start a private test, preview camera/mic, and watch each other before event day.</span>
+              </div>
+              <div className="live-room-card">
+                <strong>Event day</strong>
+                <span>The claimer starts the official event, then approved streamers can go live.</span>
+              </div>
+              <div className="live-room-card">
+                <strong>Audience layer</strong>
+                <span>Supporter chat and reactions should appear without giving supporters camera access.</span>
+              </div>
             </div>
-            <form className="compact-form" onSubmit={submitDirection}>
-              <FormField label="Supporter direction/input" name="direction" placeholder="Take the bridge next" />
-              <button className="button button-primary" type="submit">
-                Log direction
-              </button>
-            </form>
-            <form className="compact-form" onSubmit={submitCheckin}>
-              <FormField label="Check-in label" name="checkin" placeholder="Checkpoint 2: central station" />
-              <button className="button button-primary" type="submit">
-                Submit check-in
-              </button>
-            </form>
-            {eventMessage ? <p className="form-message">{eventMessage}</p> : null}
           </aside>
         </div>
+        <section className="mvp-panel">
+          <p className="eyebrow">Evidence lane ideas</p>
+          <div className="live-room-card-list evidence-card-list">
+            <div className="live-room-card">
+              <strong>Links</strong>
+              <span>GPT/chat links, public posts, GPS activity links, receipts, docs, repo links, and third-party proof pages.</span>
+            </div>
+            <div className="live-room-card">
+              <strong>Uploads</strong>
+              <span>Photos, screenshots, short clips, route captures, device metadata exports, and signed recorder notes.</span>
+            </div>
+            <div className="live-room-card">
+              <strong>Checkpoints</strong>
+              <span>Timestamped proof code, supporter-selected constraints, location check-ins, and before/after state captures.</span>
+            </div>
+          </div>
+        </section>
         <Timeline events={data.proofEvents} checkins={data.checkins} />
       </main>
     </AppChrome>
@@ -3235,7 +3236,7 @@ function RecorderInvitePage({ token }: { token: string }) {
         <p className="eyebrow">Recorder invite</p>
         <h1 className="page-title">Support the proof.</h1>
         <section className="mvp-panel">
-          {claim ? <h2>{claim.title}</h2> : null}
+          {claim ? <h2 className="claim-title-effect">{claim.title}</h2> : null}
           {invite ? (
             <>
               <p>
@@ -3256,83 +3257,39 @@ function RecorderInvitePage({ token }: { token: string }) {
   );
 }
 
-function LiveKitJoinPanel({ claim }: { claim: Claim }) {
-  const [displayName, setDisplayName] = useState('');
-  const [role, setRole] = useState<'claimer' | 'recorder' | 'witness' | 'supporter'>('supporter');
-  const [connectionState, setConnectionState] = useState('Not connected');
-
-  async function joinRoom(currentDisplayName: string) {
-    setConnectionState('Requesting token...');
-    const roomName = `claim-${claim.slug}`;
-    const response = await fetch('/api/livekit-token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        roomName,
-        identity: `${role}-${crypto.randomUUID()}`,
-        displayName: currentDisplayName || role,
-        role,
-      }),
-    });
-
-    if (!response.ok) {
-      setConnectionState('Token request failed. Deploy on Vercel or check API env vars.');
-      return;
-    }
-
-    const { token } = (await response.json()) as { token: string };
-    const room = new Room();
-    room.on(RoomEvent.ConnectionStateChanged, (state) => setConnectionState(state));
-    await room.connect(import.meta.env.VITE_LIVEKIT_URL, token);
-
-    if (role !== 'supporter') {
-      await room.localParticipant.setCameraEnabled(true);
-      await room.localParticipant.setMicrophoneEnabled(true);
-    }
-
-    setConnectionState(`Connected to ${roomName} as ${role}`);
-  }
+function LiveRoomPreview({
+  claim,
+  viewerRole,
+}: {
+  claim: Claim;
+  viewerRole: 'claimer' | 'recorder' | 'supporter';
+}) {
+  const canStream = viewerRole === 'claimer' || viewerRole === 'recorder';
 
   return (
     <div className="livekit-panel">
       <div className="video-placeholder livekit-placeholder">
-        <p className="video-label">LiveKit room</p>
-        <h3>{claim.title}</h3>
+        <p className="video-label">Live room</p>
+        <h3 className="claim-title-effect">{claim.title}</h3>
         <p>
-          Join as claimer, recorder, witness, or supporter. Camera publishing is enabled for
-          claimer/recorder/witness roles.
+          {canStream
+            ? 'Streaming controls will appear here after test-run and event-day UX is locked.'
+            : 'Supporters will watch the official stream here with chat, reactions, and evidence updates.'}
         </p>
       </div>
-      <div className="compact-form">
-        <label>
-          Display name
-          <input
-            name="displayName"
-            placeholder="Your name"
-            type="text"
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-          />
-        </label>
-        <label>
-          Role
-          <select value={role} onChange={(event) => setRole(event.target.value as typeof role)}>
-            <option value="supporter">Supporter</option>
-            <option value="claimer">Claimer</option>
-            <option value="recorder">Recorder</option>
-            <option value="witness">Witness</option>
-          </select>
-        </label>
-        <button
-          className="button button-primary"
-          type="button"
-          onClick={() => {
-            void joinRoom(displayName);
-          }}
-        >
-          Join live room
-        </button>
-        <p className="form-message">{connectionState}</p>
+      <div className="live-room-state-grid">
+        <div>
+          <strong>Room mode</strong>
+          <span>Setup</span>
+        </div>
+        <div>
+          <strong>Camera</strong>
+          <span>{canStream ? 'Ready for test flow' : 'Viewer only'}</span>
+        </div>
+        <div>
+          <strong>Stream</strong>
+          <span>Not started</span>
+        </div>
       </div>
     </div>
   );
@@ -3379,10 +3336,10 @@ function useClaimBundle(slug: string) {
   return { data, loading, error, reload: load };
 }
 
-function ClaimHeader({ claim }: { claim: Claim }) {
+function ClaimHeader({ claim, label }: { claim: Claim; label?: string }) {
   return (
     <section className="claim-header">
-      <p className="eyebrow">{formatClaimType(claim.claim_type)}</p>
+      <p className="eyebrow">{label ?? formatClaimType(claim.claim_type)}</p>
       <div className="claim-meta">
         <span>{claim.status.replace(/_/g, ' ')}</span>
         <span>{formatMoney(claim.pledge_pool_cents)} pledged</span>
