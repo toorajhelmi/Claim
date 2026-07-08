@@ -252,7 +252,7 @@ module.exports = async function handler(request, response) {
 
   const emailResult = await sendRecorderEmails({
     resendApiKey: process.env.RESEND_API_KEY,
-    fromEmail: process.env.RESEND_FROM_EMAIL || 'Klaimd <noreply@send.klaimd.app>',
+    fromEmail: process.env.RESEND_FROM_EMAIL || 'Klaimd <noreply@klaimd.app>',
     appName: process.env.VITE_APP_NAME || 'Klaimd',
     origin,
     claim,

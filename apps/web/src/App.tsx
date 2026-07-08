@@ -3408,15 +3408,51 @@ function ProofRules({ rules }: { rules: ProofRule[] }) {
 }
 
 function ShareBar({ claim }: { claim: Claim }) {
+  const [shareStatus, setShareStatus] = useState('');
   const url = `${window.location.origin}/claims/${claim.slug}`;
   const shareText = [
     `I am making a ${appConfig.name} claim: "${claim.title}"`,
     `Goal: ${formatMoney(claim.pledge_threshold_cents)} pledged before proof starts.`,
     'Back it, share it, and watch the live proof.',
   ].join('\n');
+  const shareTitle = `${appConfig.name} claim: ${claim.title}`;
   const encodedUrl = encodeURIComponent(url);
   const encodedText = encodeURIComponent(shareText);
   const encodedTextWithUrl = encodeURIComponent(`${shareText}\n${url}`);
+  const encodedTitle = encodeURIComponent(shareTitle);
+
+  const handleCopyForInstagram = async () => {
+    const caption = `${shareText}\n${url}`;
+
+    try {
+      await navigator.clipboard.writeText(caption);
+      setShareStatus('Copied caption and link for Instagram.');
+    } catch {
+      setShareStatus('Copy failed. Select the link above and paste it into Instagram.');
+    }
+  };
+
+  const handleNativeShare = async () => {
+    if (!navigator.share) {
+      setShareStatus('Use copy for Instagram, or paste the link into any app.');
+      return;
+    }
+
+    try {
+      await navigator.share({
+        title: shareTitle,
+        text: shareText,
+        url,
+      });
+      setShareStatus('Share sheet opened.');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+
+      setShareStatus('Share sheet failed. Use copy instead.');
+    }
+  };
 
   return (
     <div className="share-bar">
@@ -3430,18 +3466,28 @@ function ShareBar({ claim }: { claim: Claim }) {
       <a className="button button-ghost" href={`https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`} target="_blank" rel="noreferrer">
         Telegram
       </a>
-      <a className="button button-ghost" href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`} target="_blank" rel="noreferrer">
+      <a className="button button-ghost" href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedText}`} target="_blank" rel="noreferrer">
         Facebook
       </a>
-      <a className="button button-ghost" href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`} target="_blank" rel="noreferrer">
+      <a className="button button-ghost" href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodedUrl}&title=${encodedTitle}&summary=${encodedText}`} target="_blank" rel="noreferrer">
         LinkedIn
       </a>
       <a className="button button-ghost" href={`https://www.reddit.com/submit?url=${encodedUrl}&title=${encodedText}`} target="_blank" rel="noreferrer">
         Reddit
       </a>
+      <button className="button button-ghost" type="button" onClick={handleCopyForInstagram}>
+        Instagram copy
+      </button>
+      <button className="button button-ghost" type="button" onClick={handleNativeShare}>
+        Share sheet
+      </button>
       <a className="button button-ghost" href={`mailto:?subject=${encodeURIComponent(`${appConfig.name} claim: ${claim.title}`)}&body=${encodedTextWithUrl}`}>
         Email
       </a>
+      <p className="share-note">
+        Instagram does not allow websites to prefill a feed/story post. Copy the caption, then paste it in Instagram.
+      </p>
+      {shareStatus ? <p className="share-status">{shareStatus}</p> : null}
     </div>
   );
 }
