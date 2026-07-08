@@ -2406,34 +2406,12 @@ h3 {
 .live-room-stage {
   position: relative;
   display: grid;
-  gap: 1rem;
-  min-height: clamp(22rem, 46vw, 34rem);
-  padding: 1rem;
+  gap: 0.85rem;
+  min-height: 0;
+  padding: 0;
   overflow: hidden;
-  border: 1px solid rgba(112, 255, 139, 0.22);
-  border-radius: 1.6rem;
-  background:
-    radial-gradient(circle at 18% 0%, rgba(112, 255, 139, 0.2), transparent 34%),
-    radial-gradient(circle at 78% 18%, rgba(66, 221, 255, 0.16), transparent 31%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
-    rgba(2, 5, 9, 0.86);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 24px 90px rgba(0, 0, 0, 0.36);
-}
-
-.live-room-stage::after {
-  position: absolute;
-  top: 12%;
-  left: -42%;
-  z-index: 0;
-  width: 170%;
-  height: 10rem;
-  content: "";
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent);
-  transform: rotate(-18deg);
-  animation: scan 4.5s linear infinite;
+  border-radius: 1.35rem;
+  background: transparent;
 }
 
 .live-room-stage > * {
@@ -2491,7 +2469,7 @@ h3 {
   background: rgba(0, 0, 0, 0.42);
 }
 
-.live-media-tile video[muted] {
+.live-media-tile video.is-mirrored {
   transform: scaleX(-1);
 }
 

@@ -237,6 +237,7 @@ type LiveRoomTile = {
   participantName: string;
   role: LiveViewerRole | string;
   isLocal: boolean;
+  facingMode?: 'user' | 'environment';
   videoTrack?: LocalVideoTrack | RemoteVideoTrack;
   audioTrack?: RemoteAudioTrack;
 };
@@ -3316,6 +3317,8 @@ function LiveRoomPreview({
   const [tokenDetails, setTokenDetails] = useState<LiveKitTokenResponse | null>(null);
   const [tiles, setTiles] = useState<LiveRoomTile[]>([]);
   const [cameraOn, setCameraOn] = useState(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
+  const cameraFacingModeRef = useRef<'user' | 'environment'>('user');
   const [micOn, setMicOn] = useState(false);
   const [roomMessage, setRoomMessage] = useState('');
 
@@ -3359,7 +3362,17 @@ function LiveRoomPreview({
   }
 
   function refreshTiles(room: Room) {
-    setTiles(collectLiveRoomTiles(room));
+    setTiles(collectLiveRoomTiles(room, cameraFacingModeRef.current));
+  }
+
+  async function enableCamera(room: Room, facingMode: 'user' | 'environment') {
+    await room.localParticipant.setCameraEnabled(true, {
+      facingMode,
+    });
+    setCameraOn(true);
+    setCameraFacingMode(facingMode);
+    cameraFacingModeRef.current = facingMode;
+    setTiles(collectLiveRoomTiles(room, facingMode));
   }
 
   async function startPrivateTestRoom() {
@@ -3398,8 +3411,7 @@ function LiveRoomPreview({
       await room.connect(livekitToken.livekitUrl, livekitToken.token);
 
       if (livekitToken.canPublish) {
-        await room.localParticipant.setCameraEnabled(true);
-        setCameraOn(true);
+        await enableCamera(room, cameraFacingMode);
         await room.localParticipant.setMicrophoneEnabled(true);
         setMicOn(true);
       }
@@ -3422,9 +3434,31 @@ function LiveRoomPreview({
     const room = roomRef.current;
     if (!room || !tokenDetails?.canPublish) return;
     const nextCameraState = !cameraOn;
-    await room.localParticipant.setCameraEnabled(nextCameraState);
-    setCameraOn(nextCameraState);
-    refreshTiles(room);
+
+    if (nextCameraState) {
+      await enableCamera(room, cameraFacingMode);
+    } else {
+      await room.localParticipant.setCameraEnabled(false);
+      setCameraOn(false);
+      refreshTiles(room);
+    }
+  }
+
+  async function switchCamera() {
+    const room = roomRef.current;
+    if (!room || !tokenDetails?.canPublish) return;
+    const nextFacingMode = cameraFacingMode === 'user' ? 'environment' : 'user';
+
+    try {
+      await enableCamera(room, nextFacingMode);
+      setRoomMessage(nextFacingMode === 'environment' ? 'Back camera selected.' : 'Front camera selected.');
+    } catch (cameraError) {
+      setRoomMessage(
+        cameraError instanceof Error
+          ? `Could not switch camera: ${cameraError.message}`
+          : 'Could not switch camera on this device.',
+      );
+    }
   }
 
   async function toggleMic() {
@@ -3453,13 +3487,6 @@ function LiveRoomPreview({
     <div className="livekit-panel">
       {isConnected ? (
         <div className="live-room-stage">
-          <div className="live-room-stage-header">
-            <div>
-              <p className="video-label">Private test room</p>
-              <h3 className="claim-title-effect">{claim.title}</h3>
-            </div>
-            <span>{tiles.length} participant{tiles.length === 1 ? '' : 's'}</span>
-          </div>
           <div className="live-room-tile-grid">
             {tiles.map((tile) => (
               <LiveMediaTile key={tile.id} tile={tile} />
@@ -3489,6 +3516,9 @@ function LiveRoomPreview({
                 <button className="button button-secondary" type="button" onClick={toggleCamera}>
                   {cameraOn ? 'Turn camera off' : 'Turn camera on'}
                 </button>
+                <button className="button button-secondary" type="button" onClick={switchCamera}>
+                  {cameraFacingMode === 'user' ? 'Use back camera' : 'Use front camera'}
+                </button>
                 <button className="button button-secondary" type="button" onClick={toggleMic}>
                   {micOn ? 'Mute mic' : 'Unmute mic'}
                 </button>
@@ -3512,7 +3542,7 @@ function LiveRoomPreview({
         </div>
         <div>
           <strong>Camera</strong>
-          <span>{canStream ? (cameraOn ? 'Publishing' : 'Ready') : 'Viewer only'}</span>
+          <span>{canStream ? (cameraOn ? `Publishing ${cameraFacingMode === 'environment' ? 'back' : 'front'}` : 'Ready') : 'Viewer only'}</span>
         </div>
         <div>
           <strong>Stream</strong>
@@ -3523,7 +3553,7 @@ function LiveRoomPreview({
   );
 }
 
-function collectLiveRoomTiles(room: Room): LiveRoomTile[] {
+function collectLiveRoomTiles(room: Room, localFacingMode: 'user' | 'environment'): LiveRoomTile[] {
   const localVideoPublication = room.localParticipant.getTrackPublication(Track.Source.Camera);
   const localVideoTrack = localVideoPublication?.videoTrack instanceof LocalVideoTrack
     ? localVideoPublication.videoTrack
@@ -3534,6 +3564,7 @@ function collectLiveRoomTiles(room: Room): LiveRoomTile[] {
     participantName: room.localParticipant.name || 'You',
     role: localRole,
     isLocal: true,
+    facingMode: localFacingMode,
     videoTrack: localVideoTrack,
   }];
 
@@ -3597,7 +3628,13 @@ function LiveMediaTile({ tile }: { tile: LiveRoomTile }) {
   return (
     <div className="live-media-tile">
       {tile.videoTrack ? (
-        <video ref={videoRef} autoPlay muted={tile.isLocal} playsInline />
+        <video
+          ref={videoRef}
+          autoPlay
+          className={tile.isLocal && tile.facingMode === 'user' ? 'is-mirrored' : undefined}
+          muted={tile.isLocal}
+          playsInline
+        />
       ) : (
         <div className="live-media-placeholder">
           <span>{tile.participantName.slice(0, 1).toUpperCase()}</span>
