@@ -221,6 +221,7 @@ type ClaimBundle = {
 };
 
 type LiveViewerRole = 'claimer' | 'recorder' | 'supporter';
+type LiveRoomMode = 'test' | 'official';
 
 type LiveKitTokenResponse = {
   token: string;
@@ -229,7 +230,7 @@ type LiveKitTokenResponse = {
   role: LiveViewerRole;
   displayName: string;
   canPublish: boolean;
-  mode: 'test' | 'official';
+  mode: LiveRoomMode;
 };
 
 type LiveRoomTile = {
@@ -3150,7 +3151,12 @@ function ClaimLivePage({ slug }: { slug: string }) {
         <div className="mvp-layout live-layout">
           <section className={`mvp-panel live-video-panel ${liveStageActive ? 'live-video-panel-active' : ''}`}>
             {!liveStageActive ? <p className="eyebrow">Room preview</p> : null}
-            <LiveRoomPreview claim={data.claim} onConnectionChange={setLiveStageActive} viewerRole={viewerRole} />
+            <LiveRoomSession
+              claim={data.claim}
+              mode="test"
+              onConnectionChange={setLiveStageActive}
+              viewerRole={viewerRole}
+            />
           </section>
           {!liveStageActive ? <aside className="mvp-panel live-room-sidebar">
             <p className="eyebrow">Your access</p>
@@ -3306,16 +3312,21 @@ function ClaimStatementPreview({
   );
 }
 
-function LiveRoomPreview({
+// Test runs and official live events share this session component; use `mode` to change behavior.
+function LiveRoomSession({
   claim,
+  mode = 'test',
   onConnectionChange,
   viewerRole,
 }: {
   claim: Claim;
+  mode?: LiveRoomMode;
   onConnectionChange?: (connected: boolean) => void;
   viewerRole: LiveViewerRole;
 }) {
   const canStream = viewerRole === 'claimer' || viewerRole === 'recorder';
+  const sessionLabel = mode === 'test' ? 'private test room' : 'live room';
+  const sessionStartLabel = mode === 'test' ? 'Start private test room' : 'Start live room';
   const roomRef = useRef<Room | null>(null);
   const [connectionState, setConnectionState] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [tokenDetails, setTokenDetails] = useState<LiveKitTokenResponse | null>(null);
@@ -3339,12 +3350,12 @@ function LiveRoomPreview({
     };
   }, [onConnectionChange]);
 
-  async function requestTestRoomToken() {
+  async function requestLiveRoomToken(sessionMode: LiveRoomMode) {
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData.session?.access_token;
 
     if (!accessToken) {
-      throw new Error('Sign in as the claimer or accepted recorder before joining a test room.');
+      throw new Error(`Sign in as the claimer or accepted recorder before joining a ${sessionLabel}.`);
     }
 
     const tokenResponse = await fetch('/api/livekit-token', {
@@ -3355,13 +3366,13 @@ function LiveRoomPreview({
       },
       body: JSON.stringify({
         claimSlug: claim.slug,
-        mode: 'test',
+        mode: sessionMode,
       }),
     });
     const body = await tokenResponse.json() as Partial<LiveKitTokenResponse> & { error?: string };
 
     if (!tokenResponse.ok) {
-      throw new Error(body.error || 'Could not create a private test room token.');
+      throw new Error(body.error || `Could not create a ${sessionLabel} token.`);
     }
 
     if (!body.token || !body.livekitUrl || !body.roomName || !body.role || !body.displayName || typeof body.canPublish !== 'boolean') {
@@ -3418,13 +3429,13 @@ function LiveRoomPreview({
     return labelMatch?.deviceId ?? otherDevices[0]?.deviceId ?? null;
   }
 
-  async function startPrivateTestRoom() {
+  async function startLiveRoomSession() {
     setConnectionState('connecting');
-    setRoomMessage('Opening private test room...');
+    setRoomMessage(`Opening ${sessionLabel}...`);
 
     try {
       roomRef.current?.disconnect();
-      const livekitToken = await requestTestRoomToken();
+      const livekitToken = await requestLiveRoomToken(mode);
       const room = new Room({
         adaptiveStream: true,
         dynacast: true,
@@ -3475,7 +3486,7 @@ function LiveRoomPreview({
       setCameraOn(false);
       setMicOn(false);
       setTiles([]);
-      setRoomMessage(startError instanceof Error ? startError.message : 'Could not join the private test room.');
+      setRoomMessage(startError instanceof Error ? startError.message : `Could not join the ${sessionLabel}.`);
     }
   }
 
@@ -3558,7 +3569,7 @@ function LiveRoomPreview({
     refreshTiles(room);
   }
 
-  function leavePrivateTestRoom() {
+  function leaveLiveRoomSession() {
     roomRef.current?.disconnect();
     roomRef.current = null;
     setConnectionState('idle');
@@ -3569,7 +3580,7 @@ function LiveRoomPreview({
     setMicOn(false);
     setChatOpen(true);
     setTiles([]);
-    setRoomMessage('Private test room closed on this device.');
+    setRoomMessage(`${sessionLabel.charAt(0).toUpperCase()}${sessionLabel.slice(1)} closed on this device.`);
   }
 
   const isConnected = connectionState === 'connected';
@@ -3627,7 +3638,7 @@ function LiveRoomPreview({
               onClick={() => setChatOpen((current) => !current)}
               type="chat"
             />
-            <IconButton label="Leave test room" onClick={leavePrivateTestRoom} tone="danger" type="leave" />
+            <IconButton label={`Leave ${sessionLabel}`} onClick={leaveLiveRoomSession} tone="danger" type="leave" />
           </div>
           {chatOpen ? (
             <div className="live-chat-overlay">
@@ -3645,7 +3656,9 @@ function LiveRoomPreview({
           title={claim.title}
           description={
             canStream
-              ? 'Start a private test room to check camera, mic, and recorder access before event day.'
+              ? mode === 'test'
+                ? 'Start a private test room to check camera, mic, and recorder access before event day.'
+                : 'Start the live room when the official event begins.'
               : 'Supporters will watch the official stream here with chat, reactions, and evidence updates.'
           }
         />
@@ -3654,8 +3667,8 @@ function LiveRoomPreview({
         <>
           <div className="live-room-controls">
             {canStream ? (
-              <button className="button button-primary" type="button" onClick={startPrivateTestRoom} disabled={isConnecting}>
-                {isConnecting ? 'Opening test room...' : 'Start private test room'}
+              <button className="button button-primary" type="button" onClick={startLiveRoomSession} disabled={isConnecting}>
+                {isConnecting ? `Opening ${sessionLabel}...` : sessionStartLabel}
               </button>
             ) : (
               <p className="form-message">
