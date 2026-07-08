@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { ReactNode } from 'react';
+import { LocalVideoTrack, RemoteAudioTrack, RemoteVideoTrack, Room, RoomEvent, Track } from 'livekit-client';
 import { appConfig } from './lib/app-config';
 import { supabase } from './lib/supabase';
 
@@ -217,6 +218,27 @@ type ClaimBundle = {
   recorderInvites: RecorderInvite[];
   proofEvents: ProofEvent[];
   checkins: Checkin[];
+};
+
+type LiveViewerRole = 'claimer' | 'recorder' | 'supporter';
+
+type LiveKitTokenResponse = {
+  token: string;
+  livekitUrl: string;
+  roomName: string;
+  role: LiveViewerRole;
+  displayName: string;
+  canPublish: boolean;
+  mode: 'test' | 'official';
+};
+
+type LiveRoomTile = {
+  id: string;
+  participantName: string;
+  role: LiveViewerRole | string;
+  isLocal: boolean;
+  videoTrack?: LocalVideoTrack | RemoteVideoTrack;
+  audioTrack?: RemoteAudioTrack;
 };
 
 type ClaimabilityCriterion = {
@@ -3079,7 +3101,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
 
 function ClaimLivePage({ slug }: { slug: string }) {
   const { data, loading, error } = useClaimBundle(slug);
-  const [viewerRole, setViewerRole] = useState<'claimer' | 'recorder' | 'supporter'>('supporter');
+  const [viewerRole, setViewerRole] = useState<LiveViewerRole>('supporter');
 
   useEffect(() => {
     async function loadViewerRole() {
@@ -3286,34 +3308,306 @@ function LiveRoomPreview({
   viewerRole,
 }: {
   claim: Claim;
-  viewerRole: 'claimer' | 'recorder' | 'supporter';
+  viewerRole: LiveViewerRole;
 }) {
   const canStream = viewerRole === 'claimer' || viewerRole === 'recorder';
+  const roomRef = useRef<Room | null>(null);
+  const [connectionState, setConnectionState] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+  const [tokenDetails, setTokenDetails] = useState<LiveKitTokenResponse | null>(null);
+  const [tiles, setTiles] = useState<LiveRoomTile[]>([]);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [micOn, setMicOn] = useState(false);
+  const [roomMessage, setRoomMessage] = useState('');
+
+  useEffect(() => {
+    return () => {
+      roomRef.current?.disconnect();
+      roomRef.current = null;
+    };
+  }, []);
+
+  async function requestTestRoomToken() {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+
+    if (!accessToken) {
+      throw new Error('Sign in as the claimer or accepted recorder before joining a test room.');
+    }
+
+    const tokenResponse = await fetch('/api/livekit-token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        claimSlug: claim.slug,
+        mode: 'test',
+      }),
+    });
+    const body = await tokenResponse.json() as Partial<LiveKitTokenResponse> & { error?: string };
+
+    if (!tokenResponse.ok) {
+      throw new Error(body.error || 'Could not create a private test room token.');
+    }
+
+    if (!body.token || !body.livekitUrl || !body.roomName || !body.role || !body.displayName || typeof body.canPublish !== 'boolean') {
+      throw new Error('Live room token response was incomplete.');
+    }
+
+    return body as LiveKitTokenResponse;
+  }
+
+  function refreshTiles(room: Room) {
+    setTiles(collectLiveRoomTiles(room));
+  }
+
+  async function startPrivateTestRoom() {
+    setConnectionState('connecting');
+    setRoomMessage('Opening private test room...');
+
+    try {
+      roomRef.current?.disconnect();
+      const livekitToken = await requestTestRoomToken();
+      const room = new Room({
+        adaptiveStream: true,
+        dynacast: true,
+      });
+      roomRef.current = room;
+      setTokenDetails(livekitToken);
+
+      const refreshFromEvent = () => refreshTiles(room);
+      room.on(RoomEvent.ParticipantConnected, refreshFromEvent);
+      room.on(RoomEvent.ParticipantDisconnected, refreshFromEvent);
+      room.on(RoomEvent.TrackSubscribed, refreshFromEvent);
+      room.on(RoomEvent.TrackUnsubscribed, refreshFromEvent);
+      room.on(RoomEvent.LocalTrackPublished, refreshFromEvent);
+      room.on(RoomEvent.LocalTrackUnpublished, refreshFromEvent);
+      room.on(RoomEvent.TrackMuted, refreshFromEvent);
+      room.on(RoomEvent.TrackUnmuted, refreshFromEvent);
+      room.on(RoomEvent.ConnectionStateChanged, () => {
+        refreshTiles(room);
+      });
+      room.on(RoomEvent.Disconnected, () => {
+        setConnectionState('idle');
+        setCameraOn(false);
+        setMicOn(false);
+        setTiles([]);
+      });
+
+      await room.connect(livekitToken.livekitUrl, livekitToken.token);
+
+      if (livekitToken.canPublish) {
+        await room.localParticipant.setCameraEnabled(true);
+        setCameraOn(true);
+        await room.localParticipant.setMicrophoneEnabled(true);
+        setMicOn(true);
+      }
+
+      setConnectionState('connected');
+      refreshTiles(room);
+      setRoomMessage(`Private test room connected as ${livekitToken.displayName}.`);
+    } catch (startError) {
+      roomRef.current?.disconnect();
+      roomRef.current = null;
+      setConnectionState('error');
+      setCameraOn(false);
+      setMicOn(false);
+      setTiles([]);
+      setRoomMessage(startError instanceof Error ? startError.message : 'Could not join the private test room.');
+    }
+  }
+
+  async function toggleCamera() {
+    const room = roomRef.current;
+    if (!room || !tokenDetails?.canPublish) return;
+    const nextCameraState = !cameraOn;
+    await room.localParticipant.setCameraEnabled(nextCameraState);
+    setCameraOn(nextCameraState);
+    refreshTiles(room);
+  }
+
+  async function toggleMic() {
+    const room = roomRef.current;
+    if (!room || !tokenDetails?.canPublish) return;
+    const nextMicState = !micOn;
+    await room.localParticipant.setMicrophoneEnabled(nextMicState);
+    setMicOn(nextMicState);
+    refreshTiles(room);
+  }
+
+  function leavePrivateTestRoom() {
+    roomRef.current?.disconnect();
+    roomRef.current = null;
+    setConnectionState('idle');
+    setCameraOn(false);
+    setMicOn(false);
+    setTiles([]);
+    setRoomMessage('Private test room closed on this device.');
+  }
+
+  const isConnected = connectionState === 'connected';
+  const isConnecting = connectionState === 'connecting';
 
   return (
     <div className="livekit-panel">
-      <ClaimStatementPreview
-        label="Live room"
-        title={claim.title}
-        description={
-          canStream
-            ? 'Streaming controls will appear here after test-run and event-day UX is locked.'
-            : 'Supporters will watch the official stream here with chat, reactions, and evidence updates.'
-        }
-      />
+      {isConnected ? (
+        <div className="live-room-stage">
+          <div className="live-room-stage-header">
+            <div>
+              <p className="video-label">Private test room</p>
+              <h3 className="claim-title-effect">{claim.title}</h3>
+            </div>
+            <span>{tiles.length} participant{tiles.length === 1 ? '' : 's'}</span>
+          </div>
+          <div className="live-room-tile-grid">
+            {tiles.map((tile) => (
+              <LiveMediaTile key={tile.id} tile={tile} />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <ClaimStatementPreview
+          label="Live room"
+          title={claim.title}
+          description={
+            canStream
+              ? 'Start a private test room to check camera, mic, and recorder access before event day.'
+              : 'Supporters will watch the official stream here with chat, reactions, and evidence updates.'
+          }
+        />
+      )}
+      <div className="live-room-controls">
+        {canStream ? (
+          <>
+            {!isConnected ? (
+              <button className="button button-primary" type="button" onClick={startPrivateTestRoom} disabled={isConnecting}>
+                {isConnecting ? 'Opening test room...' : 'Start private test room'}
+              </button>
+            ) : (
+              <>
+                <button className="button button-secondary" type="button" onClick={toggleCamera}>
+                  {cameraOn ? 'Turn camera off' : 'Turn camera on'}
+                </button>
+                <button className="button button-secondary" type="button" onClick={toggleMic}>
+                  {micOn ? 'Mute mic' : 'Unmute mic'}
+                </button>
+                <button className="button button-ghost" type="button" onClick={leavePrivateTestRoom}>
+                  Leave test room
+                </button>
+              </>
+            )}
+          </>
+        ) : (
+          <p className="form-message">
+            Private test rooms are limited to the claimer and accepted recorders. Official supporter viewing comes next.
+          </p>
+        )}
+      </div>
+      {roomMessage ? <p className={`form-message ${connectionState === 'error' ? 'form-message-error' : ''}`}>{roomMessage}</p> : null}
       <div className="live-room-state-grid">
         <div>
           <strong>Room mode</strong>
-          <span>Setup</span>
+          <span>{isConnected ? 'Private test' : 'Setup'}</span>
         </div>
         <div>
           <strong>Camera</strong>
-          <span>{canStream ? 'Ready for test flow' : 'Viewer only'}</span>
+          <span>{canStream ? (cameraOn ? 'Publishing' : 'Ready') : 'Viewer only'}</span>
         </div>
         <div>
           <strong>Stream</strong>
-          <span>Not started</span>
+          <span>{isConnected ? 'Test connected' : 'Not started'}</span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function collectLiveRoomTiles(room: Room): LiveRoomTile[] {
+  const localVideoPublication = room.localParticipant.getTrackPublication(Track.Source.Camera);
+  const localVideoTrack = localVideoPublication?.videoTrack instanceof LocalVideoTrack
+    ? localVideoPublication.videoTrack
+    : undefined;
+  const localRole = room.localParticipant.attributes.role || 'claimer';
+  const tiles: LiveRoomTile[] = [{
+    id: `local:${room.localParticipant.identity}`,
+    participantName: room.localParticipant.name || 'You',
+    role: localRole,
+    isLocal: true,
+    videoTrack: localVideoTrack,
+  }];
+
+  room.remoteParticipants.forEach((participant) => {
+    const videoPublication = participant.getTrackPublication(Track.Source.Camera);
+    const audioPublication = participant.getTrackPublication(Track.Source.Microphone);
+    const videoTrack = videoPublication?.videoTrack instanceof RemoteVideoTrack
+      ? videoPublication.videoTrack
+      : undefined;
+    const audioTrack = audioPublication?.audioTrack instanceof RemoteAudioTrack
+      ? audioPublication.audioTrack
+      : undefined;
+
+    tiles.push({
+      id: `remote:${participant.identity}`,
+      participantName: participant.name || 'Recorder',
+      role: participant.attributes.role || 'participant',
+      isLocal: false,
+      videoTrack,
+      audioTrack,
+    });
+  });
+
+  return tiles;
+}
+
+function LiveMediaTile({ tile }: { tile: LiveRoomTile }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    const track = tile.videoTrack;
+
+    if (!videoElement || !track) return undefined;
+
+    track.attach(videoElement);
+    videoElement.muted = tile.isLocal;
+    videoElement.playsInline = true;
+    void videoElement.play().catch(() => undefined);
+
+    return () => {
+      track.detach(videoElement);
+    };
+  }, [tile.videoTrack, tile.isLocal]);
+
+  useEffect(() => {
+    const audioElement = audioRef.current;
+    const track = tile.audioTrack;
+
+    if (!audioElement || !track) return undefined;
+
+    track.attach(audioElement);
+    void audioElement.play().catch(() => undefined);
+
+    return () => {
+      track.detach(audioElement);
+    };
+  }, [tile.audioTrack]);
+
+  return (
+    <div className="live-media-tile">
+      {tile.videoTrack ? (
+        <video ref={videoRef} autoPlay muted={tile.isLocal} playsInline />
+      ) : (
+        <div className="live-media-placeholder">
+          <span>{tile.participantName.slice(0, 1).toUpperCase()}</span>
+          <p>Camera off</p>
+        </div>
+      )}
+      {tile.audioTrack ? <audio ref={audioRef} autoPlay /> : null}
+      <div className="live-media-caption">
+        <strong>{tile.isLocal ? `${tile.participantName} (you)` : tile.participantName}</strong>
+        <span>{String(tile.role).replace('-', ' ')}</span>
       </div>
     </div>
   );
