@@ -1099,7 +1099,8 @@ h3 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .claim-title-effect {
+  .claim-title-effect,
+  .claim-statement-shell::after {
     animation: none;
   }
 }
@@ -1370,6 +1371,30 @@ h3 {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: claimTextFlow 6.5s ease-in-out infinite;
+}
+
+.claim-statement-shell {
+  position: relative;
+  overflow: hidden;
+}
+
+.claim-statement-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+.claim-statement-shell::after {
+  position: absolute;
+  top: 10%;
+  left: -35%;
+  z-index: 0;
+  width: 160%;
+  height: 8rem;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  transform: rotate(-18deg);
+  animation: scan 4.5s linear infinite;
 }
 
 .mvp-form,
@@ -2370,6 +2395,23 @@ h3 {
 
 .livekit-placeholder {
   min-height: 21rem;
+}
+
+.claim-statement-preview {
+  min-height: clamp(18rem, 42vw, 28rem);
+  margin-bottom: 1rem;
+  justify-content: center;
+}
+
+.claim-statement-preview h3 {
+  max-width: 980px;
+  font-size: clamp(2rem, 5.4vw, 4.5rem);
+  line-height: 1.05;
+}
+
+.claim-statement-preview p:not(.video-label) {
+  max-width: 760px;
+  font-size: 1rem;
 }
 
 .live-room-state-grid,

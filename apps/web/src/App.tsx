@@ -498,7 +498,7 @@ function ClaimCardList({
   return (
     <div className="claim-card-list">
       {claims.map((claim) => (
-        <a className="claim-card-row" href={`/claims/${claim.slug}`} key={claim.id}>
+        <a className="claim-card-row claim-statement-shell" href={`/claims/${claim.slug}`} key={claim.id}>
           <span>{claim.status.replace(/_/g, ' ')}</span>
           <strong className="claim-title-effect">{claim.title}</strong>
           <small>
@@ -571,7 +571,7 @@ function LandingPage() {
               </div>
             </div>
 
-            <article className="cinema-card cinema-claim-card">
+            <article className="cinema-card cinema-claim-card claim-statement-shell">
               <span className="status live">Featured claim</span>
               <h3 className="claim-title-effect">
                 I will cross the city by sunset using only live chat
@@ -626,7 +626,7 @@ function LandingPage() {
         <section className="ticker" aria-label="Example claim ticker">
           <div className="ticker-track">
             {[...tickerItems, ...tickerItems].map((item, index) => (
-              <span className="claim-title-effect" key={`${item}-${index}`}>{item}</span>
+              <span className="claim-title-effect claim-statement-shell" key={`${item}-${index}`}>{item}</span>
             ))}
           </div>
         </section>
@@ -693,7 +693,7 @@ function LandingPage() {
           <div className="claim-grid">
             {claimExamples.map((claim, index) => (
               <article
-                className={`example-card ${index === 0 ? 'active' : ''}`}
+                className={`example-card claim-statement-shell ${index === 0 ? 'active' : ''}`}
                 key={claim.title}
               >
                 <div className="example-top">
@@ -2955,8 +2955,11 @@ function ClaimDetailPage({ slug }: { slug: string }) {
               <div className="mvp-layout">
                 <section className="mvp-panel draft-preview-panel">
                   <p className="eyebrow">Claim preview</p>
-                  <h2 className="claim-title-effect">{data.claim.title}</h2>
-                  {data.claim.description ? <p>{data.claim.description}</p> : null}
+                  <ClaimStatementPreview
+                    label="Claim"
+                    title={data.claim.title}
+                    description={data.claim.description ?? undefined}
+                  />
                   <ProofRules rules={data.proofRules} />
                 </section>
 
@@ -2997,8 +3000,11 @@ function ClaimDetailPage({ slug }: { slug: string }) {
         <div className="mvp-layout">
           <section className="mvp-panel">
             <p className="eyebrow">Preview page</p>
-            <h2 className="claim-title-effect">{data.claim.title}</h2>
-            <p>{data.claim.description}</p>
+            <ClaimStatementPreview
+              label="Claim"
+              title={data.claim.title}
+              description={data.claim.description ?? undefined}
+            />
             {isDraft ? (
               <p className="form-message">
                 This is a private draft. Add recording access and activate it before sharing with supporters.
@@ -3236,7 +3242,7 @@ function RecorderInvitePage({ token }: { token: string }) {
         <p className="eyebrow">Recorder invite</p>
         <h1 className="page-title">Support the proof.</h1>
         <section className="mvp-panel">
-          {claim ? <h2 className="claim-title-effect">{claim.title}</h2> : null}
+          {claim ? <ClaimStatementPreview label="Recorder claim" title={claim.title} /> : null}
           {invite ? (
             <>
               <p>
@@ -3257,6 +3263,24 @@ function RecorderInvitePage({ token }: { token: string }) {
   );
 }
 
+function ClaimStatementPreview({
+  label,
+  title,
+  description,
+}: {
+  label: string;
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div className="video-placeholder livekit-placeholder claim-statement-preview">
+      <p className="video-label">{label}</p>
+      <h3 className="claim-title-effect">{title}</h3>
+      {description ? <p>{description}</p> : null}
+    </div>
+  );
+}
+
 function LiveRoomPreview({
   claim,
   viewerRole,
@@ -3268,15 +3292,15 @@ function LiveRoomPreview({
 
   return (
     <div className="livekit-panel">
-      <div className="video-placeholder livekit-placeholder">
-        <p className="video-label">Live room</p>
-        <h3 className="claim-title-effect">{claim.title}</h3>
-        <p>
-          {canStream
+      <ClaimStatementPreview
+        label="Live room"
+        title={claim.title}
+        description={
+          canStream
             ? 'Streaming controls will appear here after test-run and event-day UX is locked.'
-            : 'Supporters will watch the official stream here with chat, reactions, and evidence updates.'}
-        </p>
-      </div>
+            : 'Supporters will watch the official stream here with chat, reactions, and evidence updates.'
+        }
+      />
       <div className="live-room-state-grid">
         <div>
           <strong>Room mode</strong>
