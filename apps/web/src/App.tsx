@@ -3103,9 +3103,11 @@ function ClaimDetailPage({ slug }: { slug: string }) {
 }
 
 function ClaimLivePage({ slug }: { slug: string }) {
-  const { data, loading, error } = useClaimBundle(slug);
+  const { data, loading, error, reload } = useClaimBundle(slug);
   const [viewerRole, setViewerRole] = useState<LiveViewerRole>('supporter');
   const [liveStageActive, setLiveStageActive] = useState(false);
+  const [liveLifecycleStatus, setLiveLifecycleStatus] = useState<'idle' | 'submitting'>('idle');
+  const [liveLifecycleMessage, setLiveLifecycleMessage] = useState('');
 
   useEffect(() => {
     async function loadViewerRole() {
@@ -3143,6 +3145,50 @@ function ClaimLivePage({ slug }: { slug: string }) {
     : viewerRole === 'recorder'
       ? 'Recorder'
       : 'Supporter / viewer';
+  const claim = data.claim;
+  const liveRoomMode: LiveRoomMode = claim.status === 'live' ? 'official' : 'test';
+  const canManageOfficialEvent = viewerRole === 'claimer';
+
+  async function runOfficialEventAction(action: 'start' | 'end') {
+    setLiveLifecycleStatus('submitting');
+    setLiveLifecycleMessage(action === 'start' ? 'Starting official event...' : 'Ending official event...');
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Sign in as the claimer before managing the official event.');
+      }
+
+      const eventResponse = await fetch('/api/live-event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          claimSlug: claim.slug,
+          action,
+        }),
+      });
+      const body = await eventResponse.json() as { error?: string };
+
+      if (!eventResponse.ok) {
+        throw new Error(body.error || 'Could not update official event status.');
+      }
+
+      setLiveLifecycleMessage(action === 'start'
+        ? 'Official event is live. Approved streamers can start streaming and supporters can watch.'
+        : 'Official event ended and moved to review.');
+      await reload();
+    } catch (eventActionError) {
+      setLiveLifecycleMessage(eventActionError instanceof Error ? eventActionError.message : 'Could not update official event status.');
+      throw eventActionError;
+    } finally {
+      setLiveLifecycleStatus('idle');
+    }
+  }
 
   return (
     <AppChrome immersive={liveStageActive}>
@@ -3153,7 +3199,9 @@ function ClaimLivePage({ slug }: { slug: string }) {
             {!liveStageActive ? <p className="eyebrow">Room preview</p> : null}
             <LiveRoomSession
               claim={data.claim}
-              mode="test"
+              canEndOfficialEvent={canManageOfficialEvent && data.claim.status === 'live'}
+              mode={liveRoomMode}
+              onEndOfficialEvent={() => runOfficialEventAction('end')}
               onConnectionChange={setLiveStageActive}
               viewerRole={viewerRole}
             />
@@ -3181,6 +3229,16 @@ function ClaimLivePage({ slug }: { slug: string }) {
             </div>
           </aside> : null}
         </div>
+        {!liveStageActive ? (
+          <OfficialEventPanel
+            canManage={canManageOfficialEvent}
+            claim={data.claim}
+            message={liveLifecycleMessage}
+            onEnd={() => runOfficialEventAction('end')}
+            onStart={() => runOfficialEventAction('start')}
+            status={liveLifecycleStatus}
+          />
+        ) : null}
         {!liveStageActive ? <section className="mvp-panel">
           <p className="eyebrow">Evidence lane ideas</p>
           <div className="live-room-card-list evidence-card-list">
@@ -3225,6 +3283,56 @@ function ClaimResultPage({ slug }: { slug: string }) {
         <Timeline events={data.proofEvents} checkins={data.checkins} />
       </main>
     </AppChrome>
+  );
+}
+
+function OfficialEventPanel({
+  canManage,
+  claim,
+  message,
+  onEnd,
+  onStart,
+  status,
+}: {
+  canManage: boolean;
+  claim: Claim;
+  message: string;
+  onEnd: () => Promise<void>;
+  onStart: () => Promise<void>;
+  status: 'idle' | 'submitting';
+}) {
+  const isLive = claim.status === 'live';
+  const canStart = !['draft', 'live', 'under_review', 'verified', 'not_proven', 'cancelled', 'disputed'].includes(claim.status);
+
+  return (
+    <section className="mvp-panel official-event-panel">
+      <p className="eyebrow">Official event lifecycle</p>
+      <h2>{isLive ? 'Official event is live.' : 'Event day controls.'}</h2>
+      <p>
+        {isLive
+          ? 'Supporters can now watch the official room. Claimer and accepted recorders can publish streams.'
+          : 'The private test room remains available until the claimer starts the official event.'}
+      </p>
+      {canManage ? (
+        <div className="action-grid">
+          {isLive ? (
+            <button className="button button-ghost button-danger" disabled={status === 'submitting'} onClick={onEnd} type="button">
+              {status === 'submitting' ? 'Ending event...' : 'End event and send to review'}
+            </button>
+          ) : (
+            <button className="button button-primary" disabled={!canStart || status === 'submitting'} onClick={onStart} type="button">
+              {status === 'submitting' ? 'Starting event...' : 'Start official event'}
+            </button>
+          )}
+          {!canStart && !isLive ? <p className="form-message">This claim cannot be started from its current status.</p> : null}
+        </div>
+      ) : (
+        <p className="form-message">
+          {isLive ? 'Join the official room above to watch.' : 'Waiting for the claimer to start the official event.'}
+        </p>
+      )}
+      {message ? <p className="form-message">{message}</p> : null}
+    </section>
   );
 }
 
@@ -3314,19 +3422,28 @@ function ClaimStatementPreview({
 
 // Test runs and official live events share this session component; use `mode` to change behavior.
 function LiveRoomSession({
+  canEndOfficialEvent = false,
   claim,
   mode = 'test',
+  onEndOfficialEvent,
   onConnectionChange,
   viewerRole,
 }: {
+  canEndOfficialEvent?: boolean;
   claim: Claim;
   mode?: LiveRoomMode;
+  onEndOfficialEvent?: () => Promise<void>;
   onConnectionChange?: (connected: boolean) => void;
   viewerRole: LiveViewerRole;
 }) {
   const canStream = viewerRole === 'claimer' || viewerRole === 'recorder';
+  const canJoinSession = canStream || mode === 'official';
   const sessionLabel = mode === 'test' ? 'private test room' : 'live room';
-  const sessionStartLabel = mode === 'test' ? 'Start private test room' : 'Start live room';
+  const sessionStartLabel = mode === 'test'
+    ? 'Start private test room'
+    : canStream
+      ? 'Start stream'
+      : 'Watch live';
   const roomRef = useRef<Room | null>(null);
   const [connectionState, setConnectionState] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [tokenDetails, setTokenDetails] = useState<LiveKitTokenResponse | null>(null);
@@ -3583,6 +3700,18 @@ function LiveRoomSession({
     setRoomMessage(`${sessionLabel.charAt(0).toUpperCase()}${sessionLabel.slice(1)} closed on this device.`);
   }
 
+  async function endOfficialEventFromSession() {
+    if (!onEndOfficialEvent) return;
+
+    try {
+      setRoomMessage('Ending official event...');
+      await onEndOfficialEvent();
+      leaveLiveRoomSession();
+    } catch (endError) {
+      setRoomMessage(endError instanceof Error ? endError.message : 'Could not end the official event.');
+    }
+  }
+
   const isConnected = connectionState === 'connected';
   const isConnecting = connectionState === 'connecting';
 
@@ -3638,6 +3767,9 @@ function LiveRoomSession({
               onClick={() => setChatOpen((current) => !current)}
               type="chat"
             />
+            {canEndOfficialEvent ? (
+              <IconButton label="End official event" onClick={endOfficialEventFromSession} tone="danger" type="end" />
+            ) : null}
             <IconButton label={`Leave ${sessionLabel}`} onClick={leaveLiveRoomSession} tone="danger" type="leave" />
           </div>
           {chatOpen ? (
@@ -3658,15 +3790,17 @@ function LiveRoomSession({
             canStream
               ? mode === 'test'
                 ? 'Start a private test room to check camera, mic, and recorder access before event day.'
-                : 'Start the live room when the official event begins.'
-              : 'Supporters will watch the official stream here with chat, reactions, and evidence updates.'
+                : 'Start your stream in the official event.'
+              : mode === 'official'
+                ? 'Watch the official live room here with chat, reactions, and evidence updates.'
+                : 'Supporters will watch the official stream here with chat, reactions, and evidence updates.'
           }
         />
       )}
       {!isConnected ? (
         <>
           <div className="live-room-controls">
-            {canStream ? (
+            {canJoinSession ? (
               <button className="button button-primary" type="button" onClick={startLiveRoomSession} disabled={isConnecting}>
                 {isConnecting ? `Opening ${sessionLabel}...` : sessionStartLabel}
               </button>
@@ -3829,7 +3963,7 @@ function IconButton({
   label: string;
   onClick: () => void;
   tone?: 'danger';
-  type: 'camera' | 'chat' | 'leave' | 'mic' | 'preview';
+  type: 'camera' | 'chat' | 'end' | 'leave' | 'mic' | 'preview';
 }) {
   return (
     <button
@@ -3844,7 +3978,7 @@ function IconButton({
   );
 }
 
-function IconGlyph({ type }: { type: 'camera' | 'chat' | 'leave' | 'mic' | 'preview' }) {
+function IconGlyph({ type }: { type: 'camera' | 'chat' | 'end' | 'leave' | 'mic' | 'preview' }) {
   if (type === 'camera') {
     return (
       <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -3868,6 +4002,14 @@ function IconGlyph({ type }: { type: 'camera' | 'chat' | 'leave' | 'mic' | 'prev
         <path d="M8.5 5.5h-2A1.5 1.5 0 0 0 5 7v10a1.5 1.5 0 0 0 1.5 1.5h2" />
         <path d="M13 8l4 4-4 4" />
         <path d="M17 12H8.5" />
+      </svg>
+    );
+  }
+
+  if (type === 'end') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <rect x="7" y="7" width="10" height="10" rx="1.8" />
       </svg>
     );
   }

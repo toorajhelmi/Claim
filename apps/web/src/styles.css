@@ -311,6 +311,12 @@ h3 {
   background: rgba(255, 255, 255, 0.07);
 }
 
+.button-danger {
+  color: #fff;
+  border-color: rgba(255, 117, 117, 0.45);
+  background: rgba(255, 74, 74, 0.28);
+}
+
 .button-secondary {
   color: #06110a;
   border-color: rgba(112, 255, 139, 0.45);
@@ -2796,6 +2802,17 @@ h3 {
 
 .live-room-sidebar .metric-card {
   margin-bottom: 1rem;
+}
+
+.official-event-panel {
+  display: grid;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.official-event-panel h2,
+.official-event-panel p {
+  margin: 0;
 }
 
 .evidence-card-list {

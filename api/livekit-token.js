@@ -127,6 +127,11 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  if (!isTestMode && claim.status !== 'live') {
+    response.status(403).json({ error: 'The official live event has not started yet.' });
+    return;
+  }
+
   const roomName = `claim-${claim.id}`;
   const { data: liveRoom, error: liveRoomError } = await supabaseAdmin
     .from('claim_live_rooms')
