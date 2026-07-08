@@ -3319,6 +3319,7 @@ function LiveRoomPreview({
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
   const cameraFacingModeRef = useRef<'user' | 'environment'>('user');
+  const [switchingCamera, setSwitchingCamera] = useState(false);
   const [micOn, setMicOn] = useState(false);
   const [roomMessage, setRoomMessage] = useState('');
 
@@ -3404,6 +3405,7 @@ function LiveRoomPreview({
       room.on(RoomEvent.Disconnected, () => {
         setConnectionState('idle');
         setCameraOn(false);
+        setSwitchingCamera(false);
         setMicOn(false);
         setTiles([]);
       });
@@ -3448,16 +3450,30 @@ function LiveRoomPreview({
     const room = roomRef.current;
     if (!room || !tokenDetails?.canPublish) return;
     const nextFacingMode = cameraFacingMode === 'user' ? 'environment' : 'user';
+    const previousFacingMode = cameraFacingMode;
 
+    setSwitchingCamera(true);
     try {
+      await room.localParticipant.setCameraEnabled(false);
+      setCameraOn(false);
+      refreshTiles(room);
+      await new Promise((resolve) => window.setTimeout(resolve, 120));
       await enableCamera(room, nextFacingMode);
       setRoomMessage(nextFacingMode === 'environment' ? 'Back camera selected.' : 'Front camera selected.');
     } catch (cameraError) {
+      try {
+        await enableCamera(room, previousFacingMode);
+      } catch {
+        setCameraOn(false);
+        refreshTiles(room);
+      }
       setRoomMessage(
         cameraError instanceof Error
           ? `Could not switch camera: ${cameraError.message}`
           : 'Could not switch camera on this device.',
       );
+    } finally {
+      setSwitchingCamera(false);
     }
   }
 
@@ -3475,6 +3491,7 @@ function LiveRoomPreview({
     roomRef.current = null;
     setConnectionState('idle');
     setCameraOn(false);
+    setSwitchingCamera(false);
     setMicOn(false);
     setTiles([]);
     setRoomMessage('Private test room closed on this device.');
@@ -3489,7 +3506,13 @@ function LiveRoomPreview({
         <div className="live-room-stage">
           <div className="live-room-tile-grid">
             {tiles.map((tile) => (
-              <LiveMediaTile key={tile.id} tile={tile} />
+              <LiveMediaTile
+                key={tile.id}
+                tile={tile}
+                onSwitchCamera={tile.isLocal && cameraOn ? switchCamera : undefined}
+                switchCameraLabel={cameraFacingMode === 'user' ? 'Use back camera' : 'Use front camera'}
+                switchingCamera={tile.isLocal ? switchingCamera : false}
+              />
             ))}
           </div>
         </div>
@@ -3515,9 +3538,6 @@ function LiveRoomPreview({
               <>
                 <button className="button button-secondary" type="button" onClick={toggleCamera}>
                   {cameraOn ? 'Turn camera off' : 'Turn camera on'}
-                </button>
-                <button className="button button-secondary" type="button" onClick={switchCamera}>
-                  {cameraFacingMode === 'user' ? 'Use back camera' : 'Use front camera'}
                 </button>
                 <button className="button button-secondary" type="button" onClick={toggleMic}>
                   {micOn ? 'Mute mic' : 'Unmute mic'}
@@ -3591,7 +3611,17 @@ function collectLiveRoomTiles(room: Room, localFacingMode: 'user' | 'environment
   return tiles;
 }
 
-function LiveMediaTile({ tile }: { tile: LiveRoomTile }) {
+function LiveMediaTile({
+  tile,
+  onSwitchCamera,
+  switchCameraLabel,
+  switchingCamera = false,
+}: {
+  tile: LiveRoomTile;
+  onSwitchCamera?: () => void;
+  switchCameraLabel?: string;
+  switchingCamera?: boolean;
+}) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -3642,6 +3672,22 @@ function LiveMediaTile({ tile }: { tile: LiveRoomTile }) {
         </div>
       )}
       {tile.audioTrack ? <audio ref={audioRef} autoPlay /> : null}
+      {onSwitchCamera ? (
+        <button
+          aria-label={switchCameraLabel ?? 'Switch camera'}
+          className="camera-switch-button"
+          disabled={switchingCamera}
+          onClick={onSwitchCamera}
+          type="button"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M4.8 12.4a7.2 7.2 0 0 1 12.1-5.3l1.4 1.4" />
+            <path d="M18.3 4.8v3.7h-3.7" />
+            <path d="M19.2 11.6a7.2 7.2 0 0 1-12.1 5.3l-1.4-1.4" />
+            <path d="M5.7 19.2v-3.7h3.7" />
+          </svg>
+        </button>
+      ) : null}
       <div className="live-media-caption">
         <strong>{tile.isLocal ? `${tile.participantName} (you)` : tile.participantName}</strong>
         <span>{String(tile.role).replace('-', ' ')}</span>
