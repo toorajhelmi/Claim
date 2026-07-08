@@ -900,15 +900,15 @@ function getRoute(pathname: string):
   return { name: 'landing' };
 }
 
-function AppChrome({ children }: { children: ReactNode }) {
+function AppChrome({ children, immersive = false }: { children: ReactNode; immersive?: boolean }) {
   const isCreatePage = window.location.pathname === '/claims/new';
 
   return (
-    <>
-      <div className="ambient ambient-one" />
-      <div className="ambient ambient-two" />
-      <div className="grain" aria-hidden="true" />
-      <header className="site-header">
+    <div className={immersive ? 'app-chrome app-chrome-immersive' : 'app-chrome'}>
+      {immersive ? null : <div className="ambient ambient-one" />}
+      {immersive ? null : <div className="ambient ambient-two" />}
+      {immersive ? null : <div className="grain" aria-hidden="true" />}
+      {immersive ? null : <header className="site-header">
         <a className="brand" href="/" aria-label={`${appConfig.name} home`}>
           <span className="brand-mark">{appConfig.name.charAt(0)}</span>
           <span>{appConfig.name}</span>
@@ -923,9 +923,9 @@ function AppChrome({ children }: { children: ReactNode }) {
             Run a claim
           </a>
         )}
-      </header>
+      </header>}
       {children}
-    </>
+    </div>
   );
 }
 
@@ -3144,7 +3144,7 @@ function ClaimLivePage({ slug }: { slug: string }) {
       : 'Supporter / viewer';
 
   return (
-    <AppChrome>
+    <AppChrome immersive={liveStageActive}>
       <main className={`app-page section-shell ${liveStageActive ? 'live-stage-page' : ''}`}>
         {!liveStageActive ? <ClaimHeader claim={data.claim} label="LIVE ROOM" /> : null}
         <div className="mvp-layout live-layout">
@@ -3327,7 +3327,7 @@ function LiveRoomPreview({
   const [switchingCamera, setSwitchingCamera] = useState(false);
   const [hideLocalPreview, setHideLocalPreview] = useState(false);
   const hideLocalPreviewRef = useRef(false);
-  const [chatOpen, setChatOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(true);
   const [micOn, setMicOn] = useState(false);
   const [roomMessage, setRoomMessage] = useState('');
 
@@ -3394,10 +3394,7 @@ function LiveRoomPreview({
   }
 
   async function getVideoInputDevices() {
-    if (!navigator.mediaDevices?.enumerateDevices) return [];
-
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    return devices.filter((device) => device.kind === 'videoinput');
+    return Room.getLocalDevices('videoinput', true);
   }
 
   function chooseNextCameraDevice({
@@ -3453,6 +3450,7 @@ function LiveRoomPreview({
         setCameraOn(false);
         setSwitchingCamera(false);
         setMicOn(false);
+        setChatOpen(true);
         setTiles([]);
       });
 
@@ -3466,6 +3464,7 @@ function LiveRoomPreview({
 
       setConnectionState('connected');
       onConnectionChange?.(true);
+      setChatOpen(true);
       refreshTiles(room);
       setRoomMessage('');
     } catch (startError) {
@@ -3504,12 +3503,28 @@ function LiveRoomPreview({
     setSwitchingCamera(true);
     try {
       const devices = await getVideoInputDevices();
-      const currentDeviceId = getLocalCameraDeviceId(room) ?? selectedCameraDeviceIdRef.current;
+      const currentDeviceId = room.getActiveDevice('videoinput')
+        ?? getLocalCameraDeviceId(room)
+        ?? selectedCameraDeviceIdRef.current;
       const nextDeviceId = chooseNextCameraDevice({
         devices,
         currentDeviceId,
         nextFacingMode,
       });
+
+      if (nextDeviceId) {
+        const switched = await room.switchActiveDevice('videoinput', nextDeviceId, true);
+
+        if (switched) {
+          selectedCameraDeviceIdRef.current = nextDeviceId;
+          setCameraOn(true);
+          setCameraFacingMode(nextFacingMode);
+          cameraFacingModeRef.current = nextFacingMode;
+          setTiles(collectLiveRoomTiles(room, nextFacingMode, hideLocalPreviewRef.current));
+          setRoomMessage('');
+          return;
+        }
+      }
 
       await room.localParticipant.setCameraEnabled(false);
       setCameraOn(false);
@@ -3552,6 +3567,7 @@ function LiveRoomPreview({
     selectedCameraDeviceIdRef.current = null;
     setSwitchingCamera(false);
     setMicOn(false);
+    setChatOpen(true);
     setTiles([]);
     setRoomMessage('Private test room closed on this device.');
   }
