@@ -231,6 +231,8 @@ Initial roles:
 
 ## Live room requirements
 
+Detailed implementation design: [`live-room-design.md`](./live-room-design.md).
+
 The MVP live room should support:
 
 - one challenger camera;
