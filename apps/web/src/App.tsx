@@ -573,7 +573,7 @@ function LandingPage() {
 
             <article className="cinema-card cinema-claim-card">
               <span className="status live">Featured claim</span>
-              <h3>
+              <h3 className="claim-title-effect">
                 I will cross the city by sunset using only live chat
                 directions, with timestamped location check-ins on stream.
               </h3>
@@ -626,7 +626,7 @@ function LandingPage() {
         <section className="ticker" aria-label="Example claim ticker">
           <div className="ticker-track">
             {[...tickerItems, ...tickerItems].map((item, index) => (
-              <span key={`${item}-${index}`}>{item}</span>
+              <span className="claim-title-effect" key={`${item}-${index}`}>{item}</span>
             ))}
           </div>
         </section>
