@@ -481,6 +481,7 @@ type HomeClaimCard = {
 
 type HomeActionCard = {
   id: string;
+  claimId: string;
   title: string;
   label: string;
   detail: string;
@@ -707,14 +708,19 @@ function UnifiedHomeView({
     recordingAssignmentCards.length > 0 ||
     upcomingSupportedCards.length > 0 ||
     pastActivityCards.length > 0;
-  const supportingCards = uniqueHomeClaimCards([...liveNowCards, ...upcomingSupportedCards, ...pastActivityCards]);
+  const actionClaimIds = new Set(actionCards.map((action) => action.claimId));
+  const supportingCards = uniqueHomeClaimCards([
+    ...liveNowCards.filter((card) => card.relationships.includes('Supported')),
+    ...upcomingSupportedCards,
+    ...pastActivityCards.filter((card) => card.relationships.includes('Supported')),
+  ]);
   const forYouCards = uniqueHomeClaimCards([
     ...liveNowCards,
     ...myClaimCards.filter((card) => card.claim.status === 'draft' || card.claim.status === 'live').slice(0, 2),
     ...recordingAssignmentCards.slice(0, 2),
     ...upcomingSupportedCards.slice(0, 2),
     ...discoverCards.slice(0, 3),
-  ]).slice(0, 6);
+  ]).filter((card) => !actionClaimIds.has(card.claim.id)).slice(0, 4);
   const homeTabs: Array<{ key: HomeSurfaceTabKey; label: string; count: number }> = [
     { key: 'for-you', label: 'For you', count: actionCards.length + forYouCards.length },
     { key: 'my-claims', label: 'My claims', count: myClaimCards.length },
@@ -1015,6 +1021,7 @@ function createHomeActionCards(
     if (card.claim.status === 'draft') {
       actions.push({
         id: `draft-${card.claim.id}`,
+        claimId: card.claim.id,
         title: card.claim.title,
         label: 'Activate draft',
         detail: 'This claim is saved but not open for backing yet.',
@@ -1026,6 +1033,7 @@ function createHomeActionCards(
     if (card.claim.status === 'live') {
       actions.push({
         id: `owner-live-${card.claim.id}`,
+        claimId: card.claim.id,
         title: card.claim.title,
         label: 'Official event live',
         detail: 'Manage the live proof room or end the event when complete.',
@@ -1037,6 +1045,7 @@ function createHomeActionCards(
     if (card.claim.status === 'under_review') {
       actions.push({
         id: `owner-review-${card.claim.id}`,
+        claimId: card.claim.id,
         title: card.claim.title,
         label: 'In review',
         detail: 'Review the evidence package or reopen the official event if needed.',
@@ -1052,6 +1061,7 @@ function createHomeActionCards(
     if (invite?.status === 'pending') {
       actions.push({
         id: `recorder-pending-${invite.id}`,
+        claimId: card.claim.id,
         title: card.claim.title,
         label: 'Recorder invite',
         detail: 'Accept or review your recording responsibilities.',
@@ -1063,6 +1073,7 @@ function createHomeActionCards(
     if (invite?.status === 'accepted' && card.claim.status === 'live') {
       actions.push({
         id: `recorder-live-${invite.id}`,
+        claimId: card.claim.id,
         title: card.claim.title,
         label: 'Recording live',
         detail: 'Join the official live room and help capture proof.',
@@ -1076,6 +1087,7 @@ function createHomeActionCards(
     if (card.claim.status === 'live') {
       actions.push({
         id: `support-live-${card.claim.id}`,
+        claimId: card.claim.id,
         title: card.claim.title,
         label: 'Supported claim live',
         detail: 'A claim you backed is live now.',
