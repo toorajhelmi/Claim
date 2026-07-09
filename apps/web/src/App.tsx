@@ -4363,32 +4363,32 @@ function ShareBar({ claim }: { claim: Claim }) {
   return (
     <div className="share-bar">
       <input readOnly value={url} aria-label="Claim share URL" />
-      <a className="button button-ghost" href={`https://twitter.com/intent/tweet?text=${encodedTextWithUrl}`} target="_blank" rel="noreferrer">
-        Share on X
+      <a className="share-icon-button" href={`https://twitter.com/intent/tweet?text=${encodedTextWithUrl}`} target="_blank" rel="noreferrer" aria-label="Share on X" title="X">
+        <span aria-hidden="true">X</span>
       </a>
-      <a className="button button-ghost" href={`https://wa.me/?text=${encodedTextWithUrl}`} target="_blank" rel="noreferrer">
-        WhatsApp
+      <a className="share-icon-button" href={`https://wa.me/?text=${encodedTextWithUrl}`} target="_blank" rel="noreferrer" aria-label="Share on WhatsApp" title="WhatsApp">
+        <span aria-hidden="true">WA</span>
       </a>
-      <a className="button button-ghost" href={`https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`} target="_blank" rel="noreferrer">
-        Telegram
+      <a className="share-icon-button" href={`https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`} target="_blank" rel="noreferrer" aria-label="Share on Telegram" title="Telegram">
+        <span aria-hidden="true">TG</span>
       </a>
-      <a className="button button-ghost" href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedText}`} target="_blank" rel="noreferrer">
-        Facebook
+      <a className="share-icon-button" href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedText}`} target="_blank" rel="noreferrer" aria-label="Share on Facebook" title="Facebook">
+        <span aria-hidden="true">F</span>
       </a>
-      <a className="button button-ghost" href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodedUrl}&title=${encodedTitle}&summary=${encodedText}`} target="_blank" rel="noreferrer">
-        LinkedIn
+      <a className="share-icon-button" href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodedUrl}&title=${encodedTitle}&summary=${encodedText}`} target="_blank" rel="noreferrer" aria-label="Share on LinkedIn" title="LinkedIn">
+        <span aria-hidden="true">IN</span>
       </a>
-      <a className="button button-ghost" href={`https://www.reddit.com/submit?url=${encodedUrl}&title=${encodedText}`} target="_blank" rel="noreferrer">
-        Reddit
+      <a className="share-icon-button" href={`https://www.reddit.com/submit?url=${encodedUrl}&title=${encodedText}`} target="_blank" rel="noreferrer" aria-label="Share on Reddit" title="Reddit">
+        <span aria-hidden="true">R</span>
       </a>
-      <button className="button button-ghost" type="button" onClick={handleCopyForInstagram}>
-        Instagram copy
+      <button className="share-icon-button" type="button" onClick={handleCopyForInstagram} aria-label="Copy for Instagram" title="Instagram">
+        <span aria-hidden="true">IG</span>
       </button>
-      <button className="button button-ghost" type="button" onClick={handleNativeShare}>
-        Share sheet
+      <button className="share-icon-button" type="button" onClick={handleNativeShare} aria-label="Open native share sheet" title="Share">
+        <span aria-hidden="true">SH</span>
       </button>
-      <a className="button button-ghost" href={`mailto:?subject=${encodeURIComponent(`${appConfig.name} claim: ${claim.title}`)}&body=${encodedTextWithUrl}`}>
-        Email
+      <a className="share-icon-button" href={`mailto:?subject=${encodeURIComponent(`${appConfig.name} claim: ${claim.title}`)}&body=${encodedTextWithUrl}`} aria-label="Share by email" title="Email">
+        <span aria-hidden="true">@</span>
       </a>
       <p className="share-note">
         Instagram does not allow websites to prefill a feed/story post. Copy the caption, then paste it in Instagram.
