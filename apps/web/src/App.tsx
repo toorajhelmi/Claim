@@ -929,10 +929,7 @@ function AppChrome({ children, immersive = false }: { children: ReactNode; immer
   const isCreatePage = window.location.pathname === '/claims/new';
 
   return (
-    <div className={immersive ? 'app-chrome app-chrome-immersive' : 'app-chrome'}>
-      {immersive ? null : <div className="ambient ambient-one" />}
-      {immersive ? null : <div className="ambient ambient-two" />}
-      {immersive ? null : <div className="grain" aria-hidden="true" />}
+    <div className={immersive ? 'app-chrome app-chrome-immersive' : 'app-chrome app-chrome-product'}>
       {immersive ? null : <header className="site-header">
         <a className="brand" href="/" aria-label={`${appConfig.name} home`}>
           <span className="brand-mark">{appConfig.name.charAt(0)}</span>

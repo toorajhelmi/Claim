@@ -8,15 +8,23 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   --bg: #05070d;
-  --panel: rgba(255, 255, 255, 0.07);
-  --panel-strong: rgba(255, 255, 255, 0.12);
-  --line: rgba(255, 255, 255, 0.14);
+  --surface: #080b12;
+  --surface-raised: #0b0f18;
+  --surface-soft: #101621;
+  --panel: rgba(255, 255, 255, 0.055);
+  --panel-strong: rgba(255, 255, 255, 0.095);
+  --line: rgba(255, 255, 255, 0.105);
+  --line-strong: rgba(255, 255, 255, 0.16);
   --muted: rgba(248, 251, 255, 0.68);
+  --muted-strong: rgba(248, 251, 255, 0.82);
   --green: #70ff8b;
   --cyan: #42ddff;
   --purple: #9d6cff;
   --pink: #ff4fd8;
   --orange: #ffb347;
+  --danger: #ff7474;
+  --shadow-soft: 0 18px 70px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 18px 50px rgba(0, 0, 0, 0.26);
 }
 
 * {
@@ -37,11 +45,7 @@ body {
   margin: 0;
   overflow-x: clip;
   color: #f8fbff;
-  background:
-    radial-gradient(circle at 20% 10%, rgba(112, 255, 139, 0.2), transparent 28rem),
-    radial-gradient(circle at 85% 15%, rgba(157, 108, 255, 0.28), transparent 30rem),
-    radial-gradient(circle at 55% 70%, rgba(66, 221, 255, 0.12), transparent 26rem),
-    var(--bg);
+  background: var(--bg);
 }
 
 a {
@@ -77,6 +81,11 @@ canvas {
   height: 100dvh;
   overflow: hidden;
   background: #000;
+}
+
+.app-chrome-product {
+  min-height: 100vh;
+  background: var(--bg);
 }
 
 .grain {
@@ -126,32 +135,32 @@ canvas {
   max-width: 1180px;
   width: 100%;
   margin: 0 auto;
-  padding: 1rem 1.25rem;
-  backdrop-filter: blur(16px);
+  padding: 0.85rem 1.25rem;
 }
 
 .brand,
 .nav-links,
 .nav-cta {
   border: 1px solid var(--line);
-  background: rgba(5, 7, 13, 0.62);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  background: rgba(8, 11, 18, 0.88);
+  box-shadow: 0 16px 46px rgba(0, 0, 0, 0.26);
+  backdrop-filter: blur(18px);
 }
 
 .brand {
   display: inline-flex;
   gap: 0.65rem;
   align-items: center;
-  padding: 0.5rem 0.75rem;
+  padding: 0.46rem 0.72rem;
   border-radius: 999px;
   font-weight: 900;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.025em;
 }
 
 .brand-mark {
   display: grid;
-  width: 2rem;
-  height: 2rem;
+  width: 1.85rem;
+  height: 1.85rem;
   place-items: center;
   color: #051108;
   border-radius: 999px;
@@ -166,10 +175,10 @@ canvas {
 }
 
 .nav-links a {
-  padding: 0.65rem 0.85rem;
+  padding: 0.58rem 0.82rem;
   color: var(--muted);
-  font-size: 0.88rem;
-  font-weight: 700;
+  font-size: 0.84rem;
+  font-weight: 850;
   border-radius: 999px;
 }
 
@@ -179,7 +188,8 @@ canvas {
 }
 
 .nav-cta {
-  padding: 0.8rem 1rem;
+  min-height: 2.7rem;
+  padding: 0.72rem 1rem;
   color: #061006;
   font-weight: 900;
   border-color: rgba(112, 255, 139, 0.55);
@@ -231,7 +241,7 @@ p {
 h1 {
   max-width: 760px;
   margin-bottom: 1.25rem;
-  font-size: clamp(4.25rem, 11vw, 9.25rem);
+  font-size: clamp(3.3rem, 8vw, 7.4rem);
   font-weight: 900;
   line-height: 0.96;
   letter-spacing: -0.035em;
@@ -239,7 +249,7 @@ h1 {
 
 h2 {
   margin-bottom: 1rem;
-  font-size: clamp(2.25rem, 5vw, 4.5rem);
+  font-size: clamp(2rem, 4.5vw, 3.9rem);
   font-weight: 900;
   line-height: 1.04;
   letter-spacing: -0.035em;
@@ -247,9 +257,13 @@ h2 {
 
 h3 {
   margin-bottom: 0.75rem;
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   line-height: 1.15;
   letter-spacing: -0.015em;
+}
+
+.hero-copy h1 {
+  font-size: clamp(4.25rem, 11vw, 9.25rem);
 }
 
 .hero-lede,
@@ -279,9 +293,12 @@ h3 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 3.25rem;
-  padding: 0.95rem 1.25rem;
+  min-height: 3rem;
+  padding: 0.82rem 1.12rem;
+  color: #fff;
+  font-size: 0.92rem;
   font-weight: 900;
+  letter-spacing: -0.005em;
   border: 1px solid transparent;
   border-radius: 999px;
   transition:
@@ -302,19 +319,22 @@ h3 {
 .button-primary {
   color: #041006;
   background: linear-gradient(135deg, var(--green), var(--cyan));
-  box-shadow: 0 0 34px rgba(112, 255, 139, 0.26);
+  box-shadow:
+    0 14px 34px rgba(112, 255, 139, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
 }
 
 .button-ghost {
   color: #fff;
   border-color: var(--line);
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .button-danger {
   color: #fff;
   border-color: rgba(255, 117, 117, 0.45);
-  background: rgba(255, 74, 74, 0.28);
+  background: rgba(255, 74, 74, 0.22);
 }
 
 .button-secondary {
@@ -1314,7 +1334,7 @@ h3 {
 }
 
 .app-page {
-  padding: 4rem 0 6rem;
+  padding: clamp(2rem, 5vw, 3.6rem) 0 5rem;
 }
 
 .auth-page {
@@ -1323,21 +1343,23 @@ h3 {
   min-width: 0;
   min-height: calc(100vh - 5rem);
   place-items: center;
-  padding: 4rem 0 6rem;
+  padding: clamp(2rem, 5vw, 3.6rem) 0 5rem;
   overflow-x: clip;
 }
 
 .page-title {
   max-width: 980px;
-  margin-bottom: 1rem;
-  font-size: clamp(3rem, 7vw, 6.5rem);
+  margin-bottom: 0.75rem;
+  font-size: clamp(2.65rem, 6vw, 4.9rem);
+  line-height: 0.98;
+  letter-spacing: -0.045em;
 }
 
 .page-lede {
-  max-width: 760px;
+  max-width: 680px;
   color: var(--muted);
-  font-size: 1.12rem;
-  line-height: 1.7;
+  font-size: clamp(0.98rem, 2vw, 1.08rem);
+  line-height: 1.62;
 }
 
 .dashboard-hero {
@@ -1345,7 +1367,7 @@ h3 {
   gap: 1rem;
   align-items: end;
   justify-content: space-between;
-  margin-bottom: 2rem;
+  margin-bottom: 1.45rem;
 }
 
 .panel-heading-row {
@@ -1353,34 +1375,49 @@ h3 {
   gap: 1rem;
   align-items: start;
   justify-content: space-between;
-  margin-bottom: 1rem;
+  margin-bottom: 0.9rem;
 }
 
 .panel-heading-row h2 {
   margin: 0;
-  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-size: clamp(1.45rem, 3vw, 2.2rem);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
 }
 
 .claim-card-list {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.65rem;
 }
 
 .claim-card-row {
   display: grid;
-  gap: 0.35rem;
-  padding: 0.95rem;
+  gap: 0.42rem;
+  padding: 0.9rem;
   overflow-wrap: anywhere;
-  border-radius: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1.05rem;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    0 10px 28px rgba(0, 0, 0, 0.12);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.claim-card-row:hover {
+  border-color: rgba(112, 255, 139, 0.25);
   background: rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 0 0 1px var(--line);
+  transform: translateY(-1px);
 }
 
 .claim-card-row span {
   justify-self: start;
   padding: 0.25rem 0.5rem;
   color: #041006;
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   font-weight: 900;
   letter-spacing: 0.08em;
   border-radius: 999px;
@@ -1390,6 +1427,7 @@ h3 {
 
 .claim-card-row small {
   color: var(--muted);
+  font-size: 0.84rem;
   line-height: 1.45;
 }
 
@@ -1440,31 +1478,32 @@ h3 {
 .auth-card {
   border: 1px solid var(--line);
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.035)),
-    rgba(5, 7, 13, 0.68);
-  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(20px);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.048), rgba(255, 255, 255, 0.022)),
+    var(--surface);
+  box-shadow:
+    var(--shadow-card),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .mvp-form {
   display: grid;
-  gap: 1rem;
+  gap: 0.9rem;
   max-width: 920px;
   min-width: 0;
-  margin-top: 2rem;
-  padding: 1.25rem;
-  border-radius: 2rem;
+  margin-top: 1.4rem;
+  padding: clamp(1rem, 3vw, 1.35rem);
+  border-radius: 1.45rem;
 }
 
 .wizard-card {
   display: grid;
-  gap: 1.25rem;
+  gap: 1rem;
   max-width: 760px;
   min-width: 0;
-  margin-top: 2rem;
-  padding: clamp(1rem, 4vw, 2rem);
+  margin-top: 1.35rem;
+  padding: clamp(1rem, 4vw, 1.55rem);
   overflow: clip;
-  border-radius: 2rem;
+  border-radius: 1.45rem;
 }
 
 .auth-card {
@@ -1473,16 +1512,17 @@ h3 {
   width: min(560px, 100%);
   max-width: calc(100vw - 1rem);
   min-width: 0;
-  padding: clamp(1rem, 4vw, 2rem);
+  padding: clamp(1rem, 4vw, 1.7rem);
   overflow: clip;
   border-color: rgba(255, 255, 255, 0.1);
-  border-radius: 2rem;
+  border-radius: 1.45rem;
 }
 
 .auth-card h1 {
   max-width: 520px;
   margin-bottom: 0;
-  font-size: clamp(2.4rem, 6vw, 4.7rem);
+  font-size: clamp(2.2rem, 5vw, 3.8rem);
+  line-height: 1;
 }
 
 .auth-card > p {
@@ -1543,16 +1583,16 @@ h3 {
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  height: 3.55rem;
-  min-height: 3.55rem;
+  height: 3.25rem;
+  min-height: 3.25rem;
   padding: 0 1rem;
   color: #fff;
   color-scheme: dark;
-  border: 0;
-  border-radius: 0.95rem;
-  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.055);
   outline: none;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .auth-form input:-webkit-autofill,
@@ -1594,9 +1634,9 @@ h3 {
 .wizard-field input:focus,
 .wizard-field textarea:focus,
 .wizard-field select:focus {
-  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(112, 255, 139, 0.34);
+  background: rgba(255, 255, 255, 0.075);
   box-shadow:
-    inset 0 0 0 1px rgba(112, 255, 139, 0.34),
     0 0 0 4px rgba(112, 255, 139, 0.08);
 }
 
@@ -1618,23 +1658,23 @@ h3 {
 
 .wizard-field {
   display: grid;
-  gap: 0.85rem;
+  gap: 0.7rem;
 }
 
 .wizard-field > span {
   display: block;
   max-width: 680px;
-  font-size: clamp(2rem, 5vw, 4rem);
+  font-size: clamp(1.85rem, 4vw, 3.25rem);
   font-weight: 900;
-  line-height: 1;
+  line-height: 1.03;
   letter-spacing: -0.035em;
 }
 
 .wizard-field small {
   max-width: 620px;
   color: var(--muted);
-  font-size: 1rem;
-  line-height: 1.6;
+  font-size: 0.95rem;
+  line-height: 1.55;
 }
 
 .wizard-field input,
@@ -1646,19 +1686,19 @@ h3 {
   min-width: 0;
   color: #fff;
   color-scheme: dark;
-  border: 0;
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.085);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.95rem;
+  background: rgba(255, 255, 255, 0.055);
   outline: none;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .wizard-field input,
 .wizard-field select {
-  height: 3.7rem;
-  min-height: 3.7rem;
+  height: 3.35rem;
+  min-height: 3.35rem;
   padding: 0 1rem;
-  font-size: 1.12rem;
+  font-size: 1rem;
 }
 
 .wizard-field input[type='datetime-local'],
@@ -1680,7 +1720,7 @@ h3 {
 
 .wizard-field textarea {
   padding: 1rem;
-  font-size: 1.02rem;
+  font-size: 0.98rem;
   line-height: 1.55;
   resize: vertical;
 }
@@ -1721,11 +1761,11 @@ h3 {
 
 .claimability-panel {
   display: grid;
-  gap: 0.9rem;
-  padding: 1rem;
-  border-radius: 1.25rem;
-  background: rgba(255, 255, 255, 0.055);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  gap: 0.75rem;
+  padding: 0.95rem;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 1.1rem;
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .claimability-panel.muted p,
@@ -1737,13 +1777,13 @@ h3 {
 }
 
 .claimability-panel.passed {
-  background: rgba(112, 255, 139, 0.09);
-  box-shadow: inset 0 0 0 1px rgba(112, 255, 139, 0.24);
+  border-color: rgba(112, 255, 139, 0.22);
+  background: rgba(112, 255, 139, 0.075);
 }
 
 .claimability-panel.failed {
-  background: rgba(255, 179, 71, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(255, 179, 71, 0.24);
+  border-color: rgba(255, 179, 71, 0.24);
+  background: rgba(255, 179, 71, 0.07);
 }
 
 .claimability-head {
@@ -1759,13 +1799,14 @@ h3 {
 
 .claimability-head strong {
   display: block;
-  font-size: 1.35rem;
+  font-size: 1.1rem;
 }
 
 .claimability-head > span {
   flex: 0 0 auto;
-  padding: 0.5rem 0.7rem;
+  padding: 0.42rem 0.62rem;
   color: #041006;
+  font-size: 0.82rem;
   font-weight: 900;
   border-radius: 999px;
   background: linear-gradient(135deg, var(--green), var(--cyan));
@@ -1779,13 +1820,13 @@ h3 {
 }
 
 .claimability-actions .button {
-  min-height: 3rem;
+  min-height: 2.7rem;
 }
 
 .claimability-actions-top {
-  padding: 0.75rem;
-  border-radius: 1rem;
-  background: rgba(0, 0, 0, 0.18);
+  padding: 0.65rem;
+  border-radius: 0.95rem;
+  background: rgba(0, 0, 0, 0.14);
 }
 
 .claimability-checks {
@@ -1796,9 +1837,9 @@ h3 {
 .claimability-checks > div {
   display: grid;
   gap: 0.25rem;
-  padding: 0.75rem;
+  padding: 0.65rem;
   border-radius: 0.9rem;
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(0, 0, 0, 0.14);
 }
 
 .claimability-checks span {
@@ -1920,10 +1961,11 @@ h3 {
   max-width: 100%;
   min-width: 0;
   color: #fff;
-  border: 1px solid var(--line);
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  border-radius: 0.92rem;
+  background: rgba(255, 255, 255, 0.052);
   outline: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.032);
 }
 
 .mvp-form input,
@@ -1931,8 +1973,8 @@ h3 {
 .compact-form input,
 .compact-form select,
 .share-bar input {
-  height: 3rem;
-  min-height: 3rem;
+  height: 3.1rem;
+  min-height: 3.1rem;
   padding: 0 1rem;
 }
 
@@ -1940,6 +1982,18 @@ h3 {
 .compact-form textarea {
   padding: 1rem;
   resize: vertical;
+}
+
+.mvp-form input:focus,
+.mvp-form textarea:focus,
+.mvp-form select:focus,
+.compact-form input:focus,
+.compact-form textarea:focus,
+.compact-form select:focus,
+.share-bar input:focus {
+  border-color: rgba(112, 255, 139, 0.32);
+  background: rgba(255, 255, 255, 0.074);
+  box-shadow: 0 0 0 4px rgba(112, 255, 139, 0.075);
 }
 
 .form-grid {
@@ -1973,7 +2027,7 @@ h3 {
 .form-message {
   margin: 0;
   color: var(--muted);
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   line-height: 1.5;
 }
 
@@ -1988,8 +2042,8 @@ h3 {
 
 .draft-review-hero h1 {
   margin: 0;
-  font-size: clamp(2.35rem, 8vw, 5rem);
-  line-height: 0.98;
+  font-size: clamp(2.25rem, 6vw, 4.2rem);
+  line-height: 1;
   letter-spacing: -0.045em;
 }
 
@@ -2001,7 +2055,7 @@ h3 {
 
 .draft-preview-panel h2,
 .draft-action-panel h2 {
-  font-size: clamp(1.65rem, 6vw, 2.8rem);
+  font-size: clamp(1.45rem, 4vw, 2.25rem);
   line-height: 1.05;
   letter-spacing: -0.025em;
   overflow-wrap: anywhere;
@@ -2024,14 +2078,14 @@ h3 {
 
 .activation-wizard {
   display: grid;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
 .activation-steps {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.55rem;
-  padding: 0.35rem;
+  gap: 0.42rem;
+  padding: 0.32rem;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.055);
 }
@@ -2039,7 +2093,7 @@ h3 {
 .activation-steps button {
   display: flex;
   min-width: 0;
-  min-height: 2.8rem;
+  min-height: 2.55rem;
   gap: 0.45rem;
   align-items: center;
   justify-content: center;
@@ -2088,12 +2142,12 @@ h3 {
   display: grid;
   gap: 0.45rem;
   min-width: 0;
-  padding: 1rem;
+  padding: 0.9rem;
   color: #fff;
   text-align: left;
   border: 1px solid var(--line);
-  border-radius: 1.2rem;
-  background: rgba(255, 255, 255, 0.055);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .setup-option.selected {
@@ -2116,10 +2170,10 @@ h3 {
 }
 
 .setup-fields-card {
-  padding: 1rem;
+  padding: 0.95rem;
   border: 1px solid var(--line);
-  border-radius: 1.2rem;
-  background: rgba(255, 255, 255, 0.045);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .setup-fields-card label {
@@ -2206,11 +2260,11 @@ h3 {
 
 .payment-rules {
   display: grid;
-  gap: 0.75rem;
-  padding: 1rem;
+  gap: 0.65rem;
+  padding: 0.95rem;
   border: 1px solid var(--line);
-  border-radius: 1.2rem;
-  background: rgba(255, 255, 255, 0.05);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.038);
 }
 
 .payment-rules strong {
@@ -2238,32 +2292,32 @@ h3 {
 }
 
 .claim-header {
-  margin-bottom: 1rem;
+  margin-bottom: 0.9rem;
 }
 
 .claim-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.7rem;
+  gap: 0.55rem;
 }
 
 .claim-meta span {
-  padding: 0.55rem 0.8rem;
+  padding: 0.48rem 0.7rem;
   color: rgba(248, 251, 255, 0.78);
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   font-weight: 800;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.045);
   text-transform: capitalize;
 }
 
 .mvp-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
-  gap: 1rem;
+  gap: 0.9rem;
   align-items: start;
-  margin: 1rem 0;
+  margin: 0.9rem 0;
   min-width: 0;
 }
 
@@ -2277,19 +2331,22 @@ h3 {
 }
 
 .mvp-panel {
-  padding: 1.25rem;
-  border-radius: 2rem;
+  padding: clamp(1rem, 2.4vw, 1.25rem);
+  border-radius: 1.35rem;
   min-width: 0;
   overflow: clip;
 }
 
 .mvp-panel h2 {
-  font-size: clamp(1.8rem, 4vw, 3.35rem);
+  margin-bottom: 0.65rem;
+  font-size: clamp(1.45rem, 3.2vw, 2.35rem);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
 }
 
 .mvp-panel p {
   color: var(--muted);
-  line-height: 1.6;
+  line-height: 1.55;
 }
 
 .share-bar {
@@ -2363,14 +2420,14 @@ h3 {
   display: inline-grid;
   min-width: 9rem;
   margin: 0 0.45rem 0.7rem 0;
-  padding: 1rem;
+  padding: 0.85rem;
   border: 1px solid var(--line);
-  border-radius: 1.25rem;
-  background: rgba(255, 255, 255, 0.06);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .metric-card strong {
-  font-size: 1.7rem;
+  font-size: 1.35rem;
 }
 
 .metric-card span {
@@ -2492,11 +2549,11 @@ h3 {
 
 .live-session-entry {
   display: grid;
-  gap: 0.55rem;
-  padding: 1rem;
+  gap: 0.5rem;
+  padding: 0.9rem;
   border: 1px solid var(--line);
-  border-radius: 1.2rem;
-  background: rgba(255, 255, 255, 0.06);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .live-session-entry h2,
@@ -2505,14 +2562,14 @@ h3 {
 }
 
 .live-session-entry h2 {
-  font-size: clamp(1.65rem, 4vw, 2.6rem);
+  font-size: clamp(1.35rem, 3vw, 2rem);
   line-height: 1;
 }
 
 .live-session-entry p:not(.eyebrow) {
   max-width: 42rem;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   line-height: 1.45;
 }
 
@@ -2990,10 +3047,10 @@ h3 {
 
 .live-room-state-grid div,
 .live-room-card {
-  padding: 0.95rem;
+  padding: 0.85rem;
   border: 1px solid var(--line);
-  border-radius: 1.15rem;
-  background: rgba(255, 255, 255, 0.06);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .live-room-state-grid strong,
@@ -3015,14 +3072,14 @@ h3 {
 
 .official-event-panel {
   display: grid;
-  gap: 0.85rem;
-  margin-bottom: 1rem;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
 }
 
 .official-event-panel h2,
 .official-event-panel p {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 0.86rem;
   line-height: 1.45;
 }
 
@@ -3050,8 +3107,8 @@ h3 {
 }
 
 .timeline-row {
-  padding: 1rem;
-  border-radius: 1.1rem;
+  padding: 0.9rem;
+  border-radius: 1rem;
 }
 
 .timeline-row + .timeline-row {
@@ -3111,15 +3168,15 @@ h3 {
   }
 
   .page-title {
-    font-size: clamp(2.7rem, 15vw, 4.4rem);
+    font-size: clamp(2.35rem, 12vw, 3.65rem);
     line-height: 1;
     letter-spacing: -0.025em;
   }
 
   .mvp-form,
   .mvp-panel {
-    padding: 1rem;
-    border-radius: 1.45rem;
+    padding: 0.9rem;
+    border-radius: 1.15rem;
   }
 
   .activation-steps {
