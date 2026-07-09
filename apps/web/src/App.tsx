@@ -211,6 +211,16 @@ type Checkin = {
   checked_in_at: string;
 };
 
+type SupporterInput = {
+  id: string;
+  claim_id: string;
+  supporter_name: string | null;
+  input_type: 'chat' | 'reaction' | 'prompt' | string;
+  content: string;
+  selected: boolean;
+  created_at: string;
+};
+
 type ClaimBundle = {
   claim: Claim;
   proofRules: ProofRule[];
@@ -243,6 +253,20 @@ type LiveRoomTile = {
   videoTrack?: LocalVideoTrack | RemoteVideoTrack;
   audioTrack?: RemoteAudioTrack;
 };
+
+const liveReactionOptions = [
+  { label: 'Fire', value: 'Fire' },
+  { label: 'Verify', value: 'Verify' },
+  { label: 'Shock', value: 'Shock' },
+  { label: 'Milestone', value: 'Milestone' },
+];
+
+const livePromptOptions = [
+  'Show proof code',
+  'Confirm checkpoint',
+  'Move closer',
+  'Show surroundings',
+];
 
 type ClaimabilityCriterion = {
   name: string;
@@ -3108,6 +3132,7 @@ function ClaimLivePage({ slug }: { slug: string }) {
   const [liveStageActive, setLiveStageActive] = useState(false);
   const [liveLifecycleStatus, setLiveLifecycleStatus] = useState<'idle' | 'submitting'>('idle');
   const [liveLifecycleMessage, setLiveLifecycleMessage] = useState('');
+  const [endConfirmationOpen, setEndConfirmationOpen] = useState(false);
 
   useEffect(() => {
     async function loadViewerRole() {
@@ -3207,7 +3232,7 @@ function ClaimLivePage({ slug }: { slug: string }) {
       <main className={`app-page section-shell ${liveStageActive ? 'live-stage-page' : ''}`}>
         {!liveStageActive && !isOfficialLive ? <ClaimHeader claim={data.claim} label="LIVE ROOM" /> : null}
         {!isAfterOfficialLive ? (
-          <div className="mvp-layout live-layout">
+          <div className={`mvp-layout live-layout ${isOfficialLive ? 'live-layout-solo' : ''}`}>
             <section className={`mvp-panel live-video-panel ${liveStageActive ? 'live-video-panel-active' : ''}`}>
               {!liveStageActive && !isOfficialLive ? <p className="eyebrow">Room preview</p> : null}
               <LiveRoomSession
@@ -3245,14 +3270,14 @@ function ClaimLivePage({ slug }: { slug: string }) {
           <OfficialEventPanel
             canManage={canManageOfficialEvent}
             claim={data.claim}
+            confirmEndOpen={endConfirmationOpen}
             message={liveLifecycleMessage}
-            onEnd={async () => {
-              const confirmed = window.confirm('End this official event and move the claim to review? You can reopen it later if needed.');
-
-              if (confirmed) {
-                await runOfficialEventAction('end');
-              }
+            onCancelEnd={() => setEndConfirmationOpen(false)}
+            onConfirmEnd={async () => {
+              await runOfficialEventAction('end');
+              setEndConfirmationOpen(false);
             }}
+            onRequestEnd={() => setEndConfirmationOpen(true)}
             onReopen={() => runOfficialEventAction('reopen')}
             onStart={() => runOfficialEventAction('start')}
             status={liveLifecycleStatus}
@@ -3308,16 +3333,22 @@ function ClaimResultPage({ slug }: { slug: string }) {
 function OfficialEventPanel({
   canManage,
   claim,
+  confirmEndOpen,
   message,
-  onEnd,
+  onCancelEnd,
+  onConfirmEnd,
+  onRequestEnd,
   onReopen,
   onStart,
   status,
 }: {
   canManage: boolean;
   claim: Claim;
+  confirmEndOpen: boolean;
   message: string;
-  onEnd: () => Promise<void>;
+  onCancelEnd: () => void;
+  onConfirmEnd: () => Promise<void>;
+  onRequestEnd: () => void;
   onReopen: () => Promise<void>;
   onStart: () => Promise<void>;
   status: 'idle' | 'submitting';
@@ -3343,9 +3374,24 @@ function OfficialEventPanel({
       {canManage ? (
         <div className="action-grid">
           {isLive ? (
-            <button className="button button-ghost button-danger" disabled={status === 'submitting'} onClick={onEnd} type="button">
-              {status === 'submitting' ? 'Ending event...' : 'End event and send to review'}
-            </button>
+            <>
+              <button className="button button-ghost button-danger" disabled={status === 'submitting'} onClick={onRequestEnd} type="button">
+                End event and send to review
+              </button>
+              {confirmEndOpen ? (
+                <div aria-label="Confirm ending official event" className="live-confirmation-card" role="alertdialog">
+                  <p>End this official event and move the claim to review? You can reopen it later if more live proof is needed.</p>
+                  <div>
+                    <button className="button button-ghost" disabled={status === 'submitting'} onClick={onCancelEnd} type="button">
+                      Keep event live
+                    </button>
+                    <button className="button button-ghost button-danger" disabled={status === 'submitting'} onClick={onConfirmEnd} type="button">
+                      {status === 'submitting' ? 'Ending event...' : 'Yes, end event'}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </>
           ) : canReopen ? (
             <button className="button button-primary" disabled={status === 'submitting'} onClick={onReopen} type="button">
               {status === 'submitting' ? 'Reopening event...' : 'Reopen official event'}
@@ -3487,6 +3533,11 @@ function LiveRoomSession({
   const [chatOpen, setChatOpen] = useState(true);
   const [micOn, setMicOn] = useState(false);
   const [roomMessage, setRoomMessage] = useState('');
+  const [supporterInputs, setSupporterInputs] = useState<SupporterInput[]>([]);
+  const [chatDraft, setChatDraft] = useState('');
+  const [supporterInputStatus, setSupporterInputStatus] = useState('');
+  const [recentReaction, setRecentReaction] = useState('');
+  const isOfficialMode = mode === 'official';
 
   useEffect(() => {
     return () => {
@@ -3495,6 +3546,37 @@ function LiveRoomSession({
       roomRef.current = null;
     };
   }, [onConnectionChange]);
+
+  useEffect(() => {
+    if (!isOfficialMode) {
+      setSupporterInputs([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function loadSupporterInputs() {
+      const { data: inputRows } = await supabase
+        .from('claim_supporter_inputs')
+        .select('id, claim_id, supporter_name, input_type, content, selected, created_at')
+        .eq('claim_id', claim.id)
+        .in('input_type', ['chat', 'reaction', 'prompt'])
+        .order('created_at', { ascending: false })
+        .limit(40);
+
+      if (!cancelled) {
+        setSupporterInputs(((inputRows ?? []) as SupporterInput[]).reverse());
+      }
+    }
+
+    void loadSupporterInputs();
+    const intervalId = window.setInterval(loadSupporterInputs, connectionState === 'connected' ? 3500 : 7000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [claim.id, connectionState, isOfficialMode]);
 
   async function requestLiveRoomToken(sessionMode: LiveRoomMode) {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -3743,6 +3825,73 @@ function LiveRoomSession({
     }
   }
 
+  const liveChatInputs = supporterInputs.filter((input) => input.input_type === 'chat' || input.input_type === 'prompt').slice(-12);
+  const reactionCounts = supporterInputs
+    .filter((input) => input.input_type === 'reaction')
+    .reduce<Record<string, number>>((counts, input) => {
+      counts[input.content] = (counts[input.content] ?? 0) + 1;
+      return counts;
+    }, {});
+
+  async function submitSupporterInput(inputType: 'chat' | 'reaction' | 'prompt', rawContent: string) {
+    if (!isOfficialMode) return;
+
+    const content = rawContent.trim().slice(0, inputType === 'chat' ? 240 : 80);
+    if (!content) return;
+
+    const displayName = tokenDetails?.displayName
+      || (viewerRole === 'claimer'
+        ? claim.creator_name
+        : viewerRole === 'recorder'
+          ? 'Recorder'
+          : 'Supporter');
+    const optimisticInput: SupporterInput = {
+      id: `pending-${Date.now()}`,
+      claim_id: claim.id,
+      supporter_name: displayName,
+      input_type: inputType,
+      content,
+      selected: false,
+      created_at: new Date().toISOString(),
+    };
+
+    setSupporterInputStatus('');
+    setSupporterInputs((current) => [...current.slice(-39), optimisticInput]);
+
+    if (inputType === 'reaction') {
+      setRecentReaction(content);
+      window.setTimeout(() => setRecentReaction(''), 1100);
+    }
+
+    const { data: insertedInput, error: insertError } = await supabase
+      .from('claim_supporter_inputs')
+      .insert({
+        claim_id: claim.id,
+        supporter_name: displayName,
+        input_type: inputType,
+        content,
+      })
+      .select('id, claim_id, supporter_name, input_type, content, selected, created_at')
+      .single();
+
+    if (insertError || !insertedInput) {
+      setSupporterInputs((current) => current.filter((input) => input.id !== optimisticInput.id));
+      setSupporterInputStatus('Could not send right now.');
+      return;
+    }
+
+    setSupporterInputs((current) => current.map((input) => (
+      input.id === optimisticInput.id ? insertedInput as SupporterInput : input
+    )));
+  }
+
+  async function submitChatMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextMessage = chatDraft;
+    setChatDraft('');
+    await submitSupporterInput('chat', nextMessage);
+  }
+
   return (
     <div className="livekit-panel">
       {isConnected ? (
@@ -3788,13 +3937,65 @@ function LiveRoomSession({
           </div>
           {chatOpen ? (
             <div className="live-chat-overlay">
-              <div className="live-chat-messages">
-                <p><strong>Klaimd</strong> Chat overlay is ready for the next live-room slice.</p>
-                <p>Messages will float here while the video keeps streaming.</p>
-              </div>
-              <input aria-label="Chat message" disabled placeholder="Chat sending comes next" />
+              {isOfficialMode ? (
+                <>
+                  <div className="live-chat-messages" aria-live="polite">
+                    {liveChatInputs.length > 0 ? liveChatInputs.map((input) => (
+                      <div className={`live-chat-message ${input.input_type === 'prompt' ? 'is-prompt' : ''}`} key={input.id}>
+                        <span>
+                          <strong>{input.supporter_name || 'Supporter'}</strong>
+                          <small>{formatTime(input.created_at)}</small>
+                        </span>
+                        <p>{input.input_type === 'prompt' ? `Prompt: ${input.content}` : input.content}</p>
+                      </div>
+                    )) : (
+                      <p><strong>Klaimd</strong> Official chat is open. Messages and prompts will show here.</p>
+                    )}
+                  </div>
+                  <div className="live-reaction-row" aria-label="Quick reactions">
+                    {liveReactionOptions.map((reaction) => (
+                      <button
+                        aria-label={`Send ${reaction.label} reaction`}
+                        key={reaction.value}
+                        onClick={() => void submitSupporterInput('reaction', reaction.value)}
+                        type="button"
+                      >
+                        <span>{reaction.value}</span>
+                        <small>{reactionCounts[reaction.value] ?? 0}</small>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="live-prompt-row" aria-label="Structured live prompts">
+                    {livePromptOptions.map((prompt) => (
+                      <button key={prompt} onClick={() => void submitSupporterInput('prompt', prompt)} type="button">
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+                  <form className="live-chat-form" onSubmit={submitChatMessage}>
+                    <input
+                      aria-label="Chat message"
+                      maxLength={240}
+                      onChange={(event) => setChatDraft(event.target.value)}
+                      placeholder={viewerRole === 'supporter' ? 'Send supporter chat' : 'Reply in supporter chat'}
+                      value={chatDraft}
+                    />
+                    <button className="button button-primary" type="submit">Send</button>
+                  </form>
+                  {supporterInputStatus ? <p className="live-chat-status">{supporterInputStatus}</p> : null}
+                </>
+              ) : (
+                <>
+                  <div className="live-chat-messages">
+                    <p><strong>Klaimd</strong> Backstage chat is next for private tests.</p>
+                    <p>Official supporter chat opens when the event goes live.</p>
+                  </div>
+                  <input aria-label="Chat message" disabled placeholder="Official chat opens on event day" />
+                </>
+              )}
             </div>
           ) : null}
+          {recentReaction ? <div className="live-reaction-burst" aria-hidden="true">{recentReaction}</div> : null}
         </div>
       ) : mode === 'official' ? (
         <div className="live-session-entry">
@@ -4384,6 +4585,19 @@ function formatDateTime(value: string | null) {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',
+  }).format(date);
+}
+
+function formatTime(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
   }).format(date);
 }
 

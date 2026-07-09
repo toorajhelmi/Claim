@@ -1120,6 +1120,20 @@ h3 {
   }
 }
 
+@keyframes reactionBurst {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 1.5rem, 0) scale(0.72) rotate(-8deg);
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-1rem, -5rem, 0) scale(1.28) rotate(8deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .claim-title-effect,
   .claim-statement-shell::after {
@@ -2257,6 +2271,11 @@ h3 {
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.48fr);
 }
 
+.live-layout-solo {
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0 0 0.75rem;
+}
+
 .mvp-panel {
   padding: 1.25rem;
   border-radius: 2rem;
@@ -2672,6 +2691,8 @@ h3 {
 .live-chat-messages {
   display: grid;
   gap: 0.45rem;
+  max-height: 12rem;
+  overflow-y: auto;
 }
 
 .live-chat-messages p {
@@ -2681,14 +2702,127 @@ h3 {
   line-height: 1.35;
 }
 
-.live-chat-overlay input {
+.live-chat-message {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.live-chat-message.is-prompt {
+  border-color: rgba(112, 255, 139, 0.2);
+  background: rgba(112, 255, 139, 0.09);
+}
+
+.live-chat-message span {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.live-chat-message strong,
+.live-chat-message small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-chat-message strong {
+  color: #fff;
+  font-size: 0.78rem;
+}
+
+.live-chat-message small {
+  flex: 0 0 auto;
+  color: rgba(248, 251, 255, 0.46);
+  font-size: 0.68rem;
+}
+
+.live-reaction-row,
+.live-prompt-row,
+.live-chat-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.live-reaction-row button,
+.live-prompt-row button {
+  min-height: 2.15rem;
+  padding: 0.35rem 0.62rem;
+  color: rgba(248, 251, 255, 0.88);
+  font-weight: 900;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.live-reaction-row button {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.live-reaction-row span {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.live-reaction-row small {
+  color: var(--green);
+  font-size: 0.72rem;
+}
+
+.live-prompt-row button {
+  font-size: 0.72rem;
+}
+
+.live-chat-form {
+  flex-wrap: nowrap;
+}
+
+.live-chat-form .button {
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+  padding-inline: 0.9rem;
+}
+
+.live-chat-overlay input,
+.live-chat-form input {
   width: 100%;
+  min-width: 0;
   min-height: 2.75rem;
   padding: 0 0.8rem;
   color: rgba(248, 251, 255, 0.76);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
+}
+
+.live-chat-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.live-reaction-burst {
+  position: absolute;
+  right: 1.4rem;
+  bottom: calc(max(0.75rem, env(safe-area-inset-bottom)) + 15.5rem);
+  z-index: 4;
+  color: #fff;
+  font-size: clamp(1.35rem, 5vw, 2.4rem);
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  filter: drop-shadow(0 12px 30px rgba(0, 0, 0, 0.42));
+  pointer-events: none;
+  animation: reactionBurst 1.1s ease-out both;
 }
 
 .live-room-toast {
@@ -2844,6 +2978,21 @@ h3 {
   line-height: 1.45;
 }
 
+.live-confirmation-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(255, 117, 117, 0.28);
+  border-radius: 1rem;
+  background: rgba(255, 74, 74, 0.08);
+}
+
+.live-confirmation-card > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 .evidence-card-list {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -2933,6 +3082,25 @@ h3 {
   .share-bar {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .live-chat-overlay {
+    right: 0.5rem;
+    bottom: calc(max(0.75rem, env(safe-area-inset-bottom)) + 4.4rem);
+    width: calc(100% - 1rem);
+    padding: 0.65rem;
+  }
+
+  .live-chat-form {
+    flex-wrap: wrap;
+  }
+
+  .live-chat-form .button {
+    width: 100%;
+  }
+
+  .live-prompt-row button {
+    flex: 1 1 auto;
   }
 
   .dashboard-hero,
