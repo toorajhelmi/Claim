@@ -2462,6 +2462,32 @@ h3 {
   gap: 1rem;
 }
 
+.live-session-entry {
+  display: grid;
+  gap: 0.55rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1.2rem;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.live-session-entry h2,
+.live-session-entry p {
+  margin: 0;
+}
+
+.live-session-entry h2 {
+  font-size: clamp(1.65rem, 4vw, 2.6rem);
+  line-height: 1;
+}
+
+.live-session-entry p:not(.eyebrow) {
+  max-width: 42rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 .live-video-panel-active .livekit-panel {
   height: 100%;
   gap: 0;
@@ -2766,7 +2792,8 @@ h3 {
 
 .claim-statement-preview p:not(.video-label) {
   max-width: 760px;
-  font-size: 1rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .live-room-state-grid,
@@ -2813,6 +2840,8 @@ h3 {
 .official-event-panel h2,
 .official-event-panel p {
   margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
 }
 
 .evidence-card-list {

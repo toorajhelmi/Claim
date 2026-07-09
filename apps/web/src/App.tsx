@@ -3146,6 +3146,8 @@ function ClaimLivePage({ slug }: { slug: string }) {
       ? 'Recorder'
       : 'Supporter / viewer';
   const claim = data.claim;
+  const isOfficialLive = claim.status === 'live';
+  const isAfterOfficialLive = ['under_review', 'verified', 'not_proven', 'cancelled', 'disputed'].includes(claim.status);
   const liveRoomMode: LiveRoomMode = claim.status === 'live' ? 'official' : 'test';
   const canManageOfficialEvent = viewerRole === 'claimer';
 
@@ -3193,42 +3195,44 @@ function ClaimLivePage({ slug }: { slug: string }) {
   return (
     <AppChrome immersive={liveStageActive}>
       <main className={`app-page section-shell ${liveStageActive ? 'live-stage-page' : ''}`}>
-        {!liveStageActive ? <ClaimHeader claim={data.claim} label="LIVE ROOM" /> : null}
-        <div className="mvp-layout live-layout">
-          <section className={`mvp-panel live-video-panel ${liveStageActive ? 'live-video-panel-active' : ''}`}>
-            {!liveStageActive ? <p className="eyebrow">Room preview</p> : null}
-            <LiveRoomSession
-              claim={data.claim}
-              canEndOfficialEvent={canManageOfficialEvent && data.claim.status === 'live'}
-              mode={liveRoomMode}
-              onEndOfficialEvent={() => runOfficialEventAction('end')}
-              onConnectionChange={setLiveStageActive}
-              viewerRole={viewerRole}
-            />
-          </section>
-          {!liveStageActive ? <aside className="mvp-panel live-room-sidebar">
-            <p className="eyebrow">Your access</p>
-            <Metric label="Signed in as" value={viewerRoleLabel} />
-            <p>
-              Klaimd will use the signed-in claimer account or accepted recorder invite to decide who can
-              stream. No manual name or role form should be needed here.
-            </p>
-            <div className="live-room-card-list">
-              <div className="live-room-card">
-                <strong>Test run</strong>
-                <span>Claimer and recorders should be able to start a private test, preview camera/mic, and watch each other before event day.</span>
+        {!liveStageActive && !isOfficialLive ? <ClaimHeader claim={data.claim} label="LIVE ROOM" /> : null}
+        {!isAfterOfficialLive ? (
+          <div className="mvp-layout live-layout">
+            <section className={`mvp-panel live-video-panel ${liveStageActive ? 'live-video-panel-active' : ''}`}>
+              {!liveStageActive && !isOfficialLive ? <p className="eyebrow">Room preview</p> : null}
+              <LiveRoomSession
+                claim={data.claim}
+                canEndOfficialEvent={canManageOfficialEvent && data.claim.status === 'live'}
+                mode={liveRoomMode}
+                onEndOfficialEvent={() => runOfficialEventAction('end')}
+                onConnectionChange={setLiveStageActive}
+                viewerRole={viewerRole}
+              />
+            </section>
+            {!liveStageActive && !isOfficialLive ? <aside className="mvp-panel live-room-sidebar">
+              <p className="eyebrow">Your access</p>
+              <Metric label="Signed in as" value={viewerRoleLabel} />
+              <p>
+                Klaimd will use the signed-in claimer account or accepted recorder invite to decide who can
+                stream. No manual name or role form should be needed here.
+              </p>
+              <div className="live-room-card-list">
+                <div className="live-room-card">
+                  <strong>Test run</strong>
+                  <span>Claimer and recorders should be able to start a private test, preview camera/mic, and watch each other before event day.</span>
+                </div>
+                <div className="live-room-card">
+                  <strong>Event day</strong>
+                  <span>The claimer starts the official event, then approved streamers can go live.</span>
+                </div>
+                <div className="live-room-card">
+                  <strong>Audience layer</strong>
+                  <span>Supporter chat and reactions should appear without giving supporters camera access.</span>
+                </div>
               </div>
-              <div className="live-room-card">
-                <strong>Event day</strong>
-                <span>The claimer starts the official event, then approved streamers can go live.</span>
-              </div>
-              <div className="live-room-card">
-                <strong>Audience layer</strong>
-                <span>Supporter chat and reactions should appear without giving supporters camera access.</span>
-              </div>
-            </div>
-          </aside> : null}
-        </div>
+            </aside> : null}
+          </div>
+        ) : null}
         {!liveStageActive ? (
           <OfficialEventPanel
             canManage={canManageOfficialEvent}
@@ -3239,7 +3243,7 @@ function ClaimLivePage({ slug }: { slug: string }) {
             status={liveLifecycleStatus}
           />
         ) : null}
-        {!liveStageActive ? <section className="mvp-panel">
+        {!liveStageActive && !isOfficialLive && !isAfterOfficialLive ? <section className="mvp-panel">
           <p className="eyebrow">Evidence lane ideas</p>
           <div className="live-room-card-list evidence-card-list">
             <div className="live-room-card">
@@ -3256,7 +3260,7 @@ function ClaimLivePage({ slug }: { slug: string }) {
             </div>
           </div>
         </section> : null}
-        {!liveStageActive ? <Timeline events={data.proofEvents} checkins={data.checkins} /> : null}
+        {!liveStageActive && !isOfficialLive ? <Timeline events={data.proofEvents} checkins={data.checkins} /> : null}
       </main>
     </AppChrome>
   );
@@ -3302,6 +3306,7 @@ function OfficialEventPanel({
   status: 'idle' | 'submitting';
 }) {
   const isLive = claim.status === 'live';
+  const isEnded = ['under_review', 'verified', 'not_proven', 'cancelled', 'disputed'].includes(claim.status);
   const canStart = !['draft', 'live', 'under_review', 'verified', 'not_proven', 'cancelled', 'disputed'].includes(claim.status);
 
   return (
@@ -3311,6 +3316,8 @@ function OfficialEventPanel({
       <p>
         {isLive
           ? 'Supporters can now watch the official room. Claimer and accepted recorders can publish streams.'
+          : isEnded
+            ? 'This official event has ended. The claim is now in review or final result state.'
           : 'The private test room remains available until the claimer starts the official event.'}
       </p>
       {canManage ? (
@@ -3319,6 +3326,8 @@ function OfficialEventPanel({
             <button className="button button-ghost button-danger" disabled={status === 'submitting'} onClick={onEnd} type="button">
               {status === 'submitting' ? 'Ending event...' : 'End event and send to review'}
             </button>
+          ) : isEnded ? (
+            <p className="form-message">Official event controls are closed for this claim.</p>
           ) : (
             <button className="button button-primary" disabled={!canStart || status === 'submitting'} onClick={onStart} type="button">
               {status === 'submitting' ? 'Starting event...' : 'Start official event'}
@@ -3442,7 +3451,7 @@ function LiveRoomSession({
   const sessionStartLabel = mode === 'test'
     ? 'Start private test room'
     : canStream
-      ? 'Start stream'
+      ? 'Open live room'
       : 'Watch live';
   const roomRef = useRef<Room | null>(null);
   const [connectionState, setConnectionState] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
@@ -3782,18 +3791,24 @@ function LiveRoomSession({
             </div>
           ) : null}
         </div>
+      ) : mode === 'official' ? (
+        <div className="live-session-entry">
+          <p className="eyebrow">Official live room</p>
+          <h2>{canStream ? 'Your event is live.' : 'Live proof is on.'}</h2>
+          <p>
+            {canStream
+              ? 'Open the room to stream, monitor recorders, use chat, or end the official event.'
+              : 'Open the room to watch the live proof and follow chat updates.'}
+          </p>
+        </div>
       ) : (
         <ClaimStatementPreview
           label="Live room"
           title={claim.title}
           description={
             canStream
-              ? mode === 'test'
-                ? 'Start a private test room to check camera, mic, and recorder access before event day.'
-                : 'Start your stream in the official event.'
-              : mode === 'official'
-                ? 'Watch the official live room here with chat, reactions, and evidence updates.'
-                : 'Supporters will watch the official stream here with chat, reactions, and evidence updates.'
+              ? 'Start a private test room to check camera, mic, and recorder access before event day.'
+              : 'Supporters will watch the official stream here with chat, reactions, and evidence updates.'
           }
         />
       )}
