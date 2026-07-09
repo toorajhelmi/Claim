@@ -612,7 +612,7 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
   const recorderCards = homeData.recorderClaims.map((claim) => createHomeClaimCard({
     claim,
     relationships: ['Recording'],
-    recorderInvite: homeData.recorderInvites.find((invite) => invite.claim_id === claim.id),
+    recorderInvite: findActiveRecorderInvite(homeData.recorderInvites, claim.id),
   }));
   const supportedCards = homeData.supportedClaims.map((claim) => createHomeClaimCard({
     claim,
@@ -630,21 +630,29 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
       claim,
       relationships: ['Discover'],
     }));
+  const activeRecorderCards = recorderCards.filter((card) => {
+    const invite = findActiveRecorderInvite(homeData.recorderInvites, card.claim.id);
+
+    return Boolean(invite);
+  });
   const liveNowCards = uniqueHomeClaimCards([
     ...ownedCards.filter((card) => liveClaimStatuses.includes(card.claim.status)),
-    ...recorderCards.filter((card) => liveClaimStatuses.includes(card.claim.status)),
+    ...activeRecorderCards.filter((card) => liveClaimStatuses.includes(card.claim.status)),
     ...supportedCards.filter((card) => liveClaimStatuses.includes(card.claim.status)),
   ]);
   const upcomingSupportedCards = supportedCards.filter((card) => upcomingClaimStatuses.includes(card.claim.status));
-  const recordingAssignmentCards = recorderCards.filter((card) => !finalOrReviewClaimStatuses.includes(card.claim.status));
+  const recordingAssignmentCards = activeRecorderCards.filter((card) => !finalOrReviewClaimStatuses.includes(card.claim.status));
   const pastActivityCards = uniqueHomeClaimCards([
     ...ownedCards.filter((card) => finalOrReviewClaimStatuses.includes(card.claim.status)),
-    ...recorderCards.filter((card) => finalOrReviewClaimStatuses.includes(card.claim.status)),
+    ...activeRecorderCards.filter((card) => finalOrReviewClaimStatuses.includes(card.claim.status)),
     ...supportedCards.filter((card) => finalOrReviewClaimStatuses.includes(card.claim.status)),
   ]);
-  const actionCards = createHomeActionCards(homeData, ownedCards, recorderCards, supportedCards);
-  const activityCards = createActivityCards(homeData, ownedCards, recorderCards, supportedCards);
-  const totalActiveCount = liveNowCards.length + actionCards.length;
+  const actionCards = createHomeActionCards(homeData, ownedCards, activeRecorderCards, supportedCards);
+  const activityCards = createActivityCards(homeData, ownedCards, activeRecorderCards, supportedCards);
+  const totalActiveCount = new Set([
+    ...liveNowCards.map((card) => card.claim.id),
+    ...actionCards.map((action) => action.claimId),
+  ]).size;
 
   return (
     <AppChrome>
@@ -671,6 +679,7 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
             myClaimCards={ownedCards}
             pastActivityCards={pastActivityCards}
             recordingAssignmentCards={recordingAssignmentCards}
+            supportedClaimCards={supportedCards}
             upcomingSupportedCards={upcomingSupportedCards}
           />
         ) : null}
@@ -690,6 +699,7 @@ function UnifiedHomeView({
   myClaimCards,
   pastActivityCards,
   recordingAssignmentCards,
+  supportedClaimCards,
   upcomingSupportedCards,
 }: {
   actionCards: HomeActionCard[];
@@ -698,6 +708,7 @@ function UnifiedHomeView({
   myClaimCards: HomeClaimCard[];
   pastActivityCards: HomeClaimCard[];
   recordingAssignmentCards: HomeClaimCard[];
+  supportedClaimCards: HomeClaimCard[];
   upcomingSupportedCards: HomeClaimCard[];
 }) {
   const [activeHomeTab, setActiveHomeTab] = useState<HomeSurfaceTabKey>('for-you');
@@ -709,18 +720,13 @@ function UnifiedHomeView({
     upcomingSupportedCards.length > 0 ||
     pastActivityCards.length > 0;
   const actionClaimIds = new Set(actionCards.map((action) => action.claimId));
-  const supportingCards = uniqueHomeClaimCards([
-    ...liveNowCards.filter((card) => card.relationships.includes('Supported')),
-    ...upcomingSupportedCards,
-    ...pastActivityCards.filter((card) => card.relationships.includes('Supported')),
-  ]);
+  const supportingCards = uniqueHomeClaimCards(supportedClaimCards);
   const forYouCards = uniqueHomeClaimCards([
     ...liveNowCards,
-    ...myClaimCards.filter((card) => card.claim.status === 'draft' || card.claim.status === 'live').slice(0, 2),
-    ...recordingAssignmentCards.slice(0, 2),
-    ...upcomingSupportedCards.slice(0, 2),
+    ...upcomingSupportedCards.slice(0, 1),
     ...discoverCards.slice(0, 3),
   ]).filter((card) => !actionClaimIds.has(card.claim.id)).slice(0, 4);
+  const showForYouRail = actionCards.length === 0 || forYouCards.length > 0;
   const homeTabs: Array<{ key: HomeSurfaceTabKey; label: string; count: number }> = [
     { key: 'for-you', label: 'For you', count: actionCards.length + forYouCards.length },
     { key: 'my-claims', label: 'My claims', count: myClaimCards.length },
@@ -749,13 +755,15 @@ function UnifiedHomeView({
       {activeHomeTab === 'for-you' ? (
         <>
           {actionCards.length > 0 ? <ActionRail actions={actionCards.slice(0, 3)} /> : null}
-          <HomeRail
-            eyebrow="Worth opening"
-            title={hasPersonalActivity ? 'A few useful claims now.' : 'Start by creating or supporting a claim.'}
-            cards={forYouCards}
-            emptyText="No active claims yet. Create a claim or check Discover."
-            featured
-          />
+          {showForYouRail ? (
+            <HomeRail
+              eyebrow={actionCards.length > 0 ? 'Also worth opening' : 'Worth opening'}
+              title={hasPersonalActivity ? 'A few useful claims now.' : 'Start by creating or supporting a claim.'}
+              cards={forYouCards}
+              emptyText="No active claims yet. Create a claim or check Discover."
+              featured={actionCards.length === 0}
+            />
+          ) : null}
         </>
       ) : null}
 
@@ -780,9 +788,9 @@ function UnifiedHomeView({
       {activeHomeTab === 'supporting' ? (
         <HomeRail
           eyebrow="Supporting"
-          title="Claims you backed or watched."
+          title="Claims you pledged to."
           cards={supportingCards}
-          emptyText="No supported claims yet."
+          emptyText="No pledged claims yet. Discover a claim to support."
         />
       ) : null}
 
@@ -819,7 +827,7 @@ function ActivityView({ activityCards }: { activityCards: HomeActivityCard[] }) 
   return (
     <section className="mvp-panel unified-section-panel">
       <p className="eyebrow">Activity</p>
-      <h2>What changed across your claims.</h2>
+      <h2>Recent claim status.</h2>
       <div className="home-activity-list">
         {activityCards.length === 0 ? <p className="form-message">No claim activity yet.</p> : null}
         {activityCards.map((activity) => (
@@ -835,6 +843,12 @@ function ActivityView({ activityCards }: { activityCards: HomeActivityCard[] }) 
 }
 
 function ProfileView({ data }: { data: UnifiedHomeData }) {
+  const activeRecorderClaimCount = new Set(
+    data.recorderInvites
+      .filter((invite) => invite.status === 'pending' || invite.status === 'accepted')
+      .map((invite) => invite.claim_id),
+  ).size;
+
   async function handleSignOut() {
     await supabase.auth.signOut();
     window.location.href = '/';
@@ -849,18 +863,22 @@ function ProfileView({ data }: { data: UnifiedHomeData }) {
         <div className="profile-stat-grid">
           <Metric label="My claims" value={String(data.myClaims.length)} />
           <Metric label="Supported" value={String(data.supportedClaims.length)} />
-          <Metric label="Recording" value={String(data.recorderClaims.length)} />
+          <Metric label="Recording" value={String(activeRecorderClaimCount)} />
         </div>
         <button className="button button-ghost" type="button" onClick={() => void handleSignOut()}>
           Sign out
         </button>
       </section>
       <aside className="mvp-panel unified-section-panel">
-        <p className="eyebrow">Account model</p>
-        <h2>One user, many roles.</h2>
+        <p className="eyebrow">Quick links</p>
+        <h2>Move around Klaimd.</h2>
         <p>
-          Klaimd decides whether you are a claimer, recorder, or supporter per claim. Your Home and navigation stay the same.
+          Jump straight into the two places that create the most value.
         </p>
+        <div className="home-hero-actions">
+          <a className="button button-primary" href="/claims/new">Create claim</a>
+          <a className="button button-ghost" href="/discover">Discover</a>
+        </div>
       </aside>
     </div>
   );
@@ -1097,7 +1115,7 @@ function createHomeActionCards(
     }
   });
 
-  return actions.slice(0, 8);
+  return uniqueHomeActionCards(actions).slice(0, 6);
 }
 
 function createActivityCards(
@@ -1110,19 +1128,22 @@ function createActivityCards(
     .map<HomeActivityCard>((card) => {
       const relationship = card.relationships[0] ?? 'Claim';
       const pledge = homeData.pledgesByClaimId.get(card.claim.id);
-      const detail = pledge
-        ? `${relationship} · ${formatMoney(pledge.amount_cents)} pledged · ${card.claim.status.replace(/_/g, ' ')}`
-        : `${relationship} · ${card.claim.status.replace(/_/g, ' ')} · ${formatMoney(card.claim.pledge_pool_cents)} pledged`;
+      const statusLabel = card.claim.status.replace(/_/g, ' ');
+      const detailParts = [
+        relationship,
+        pledge ? `${formatMoney(pledge.amount_cents)} pledged by you` : `${formatMoney(card.claim.pledge_pool_cents)} pledged`,
+        card.claim.live_starts_at ? `Live ${formatDateTime(card.claim.live_starts_at)}` : '',
+      ].filter(Boolean);
 
       return {
         id: `${relationship}-${card.claim.id}`,
         title: card.claim.title,
-        label: relationship,
-        detail,
+        label: getActivityLabel(card),
+        detail: `${statusLabel} · ${detailParts.join(' · ')}`,
         href: card.href,
       };
     })
-    .slice(0, 20);
+    .slice(0, 12);
 }
 
 function uniqueHomeClaimCards(cards: HomeClaimCard[]) {
@@ -1139,6 +1160,65 @@ function uniqueHomeClaimCards(cards: HomeClaimCard[]) {
   });
 
   return uniqueCards;
+}
+
+function uniqueHomeActionCards(actions: HomeActionCard[]) {
+  const seenClaimIds = new Set<string>();
+  const uniqueActions: HomeActionCard[] = [];
+
+  actions.forEach((action) => {
+    if (seenClaimIds.has(action.claimId)) {
+      return;
+    }
+
+    seenClaimIds.add(action.claimId);
+    uniqueActions.push(action);
+  });
+
+  return uniqueActions;
+}
+
+function findActiveRecorderInvite(invites: RecorderInvite[], claimId: string) {
+  return invites.find((invite) => (
+    invite.claim_id === claimId &&
+    (invite.status === 'pending' || invite.status === 'accepted')
+  ));
+}
+
+function getActivityLabel(card: HomeClaimCard) {
+  const isOwner = card.relationships.includes('Your claim');
+  const isRecorder = card.relationships.includes('Recording');
+  const isSupported = card.relationships.includes('Supported');
+
+  if (card.claim.status === 'live') {
+    return isOwner ? 'Your claim is live' : isRecorder ? 'Recording live' : 'Watch live';
+  }
+
+  if (card.claim.status === 'draft') {
+    return 'Needs setup';
+  }
+
+  if (card.claim.status === 'under_review') {
+    return isOwner ? 'Review evidence' : 'Result pending';
+  }
+
+  if (card.claim.status === 'verified') {
+    return 'Verified';
+  }
+
+  if (card.claim.status === 'not_proven') {
+    return 'Not proven';
+  }
+
+  if (isRecorder) {
+    return 'Recording role';
+  }
+
+  if (isSupported) {
+    return 'Supported';
+  }
+
+  return 'My claim';
 }
 
 function LandingPage() {
