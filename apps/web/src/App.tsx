@@ -231,6 +231,7 @@ type ClaimBundle = {
 };
 
 type ClaimDetailTabKey = 'overview' | 'backing' | 'proof' | 'live';
+type HomeSurfaceTabKey = 'for-you' | 'my-claims' | 'recording' | 'supporting' | 'discover';
 type UnifiedAppTabKey = 'home' | 'discover' | 'activity' | 'profile';
 type LiveViewerRole = 'claimer' | 'recorder' | 'supporter';
 type LiveRoomMode = 'test' | 'official';
@@ -617,10 +618,17 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
     relationships: ['Supported'],
     pledge: homeData.pledgesByClaimId.get(claim.id),
   }));
-  const discoverCards = homeData.discoverClaims.map((claim) => createHomeClaimCard({
-    claim,
-    relationships: ['Discover'],
-  }));
+  const knownClaimIds = new Set([
+    ...homeData.myClaims.map((claim) => claim.id),
+    ...homeData.supportedClaims.map((claim) => claim.id),
+    ...homeData.recorderClaims.map((claim) => claim.id),
+  ]);
+  const discoverCards = homeData.discoverClaims
+    .filter((claim) => !knownClaimIds.has(claim.id))
+    .map((claim) => createHomeClaimCard({
+      claim,
+      relationships: ['Discover'],
+    }));
   const liveNowCards = uniqueHomeClaimCards([
     ...ownedCards.filter((card) => liveClaimStatuses.includes(card.claim.status)),
     ...recorderCards.filter((card) => liveClaimStatuses.includes(card.claim.status)),
@@ -643,9 +651,9 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
         <section className="dashboard-hero unified-dashboard-hero">
           <div>
             <p className="eyebrow">Klaimd home</p>
-            <h1 className="page-title">Your action hub.</h1>
+            <h1 className="page-title">Home.</h1>
             <p className="page-lede">
-              One account for creating, recording, supporting, and proving claims. The most urgent next actions stay on top.
+              Pick a tab. See only the claims that matter for that context.
             </p>
           </div>
           <div className="home-hero-actions">
@@ -691,6 +699,7 @@ function UnifiedHomeView({
   recordingAssignmentCards: HomeClaimCard[];
   upcomingSupportedCards: HomeClaimCard[];
 }) {
+  const [activeHomeTab, setActiveHomeTab] = useState<HomeSurfaceTabKey>('for-you');
   const hasPersonalActivity =
     liveNowCards.length > 0 ||
     actionCards.length > 0 ||
@@ -698,37 +707,87 @@ function UnifiedHomeView({
     recordingAssignmentCards.length > 0 ||
     upcomingSupportedCards.length > 0 ||
     pastActivityCards.length > 0;
+  const supportingCards = uniqueHomeClaimCards([...liveNowCards, ...upcomingSupportedCards, ...pastActivityCards]);
+  const forYouCards = uniqueHomeClaimCards([
+    ...liveNowCards,
+    ...myClaimCards.filter((card) => card.claim.status === 'draft' || card.claim.status === 'live').slice(0, 2),
+    ...recordingAssignmentCards.slice(0, 2),
+    ...upcomingSupportedCards.slice(0, 2),
+    ...discoverCards.slice(0, 3),
+  ]).slice(0, 6);
+  const homeTabs: Array<{ key: HomeSurfaceTabKey; label: string; count: number }> = [
+    { key: 'for-you', label: 'For you', count: actionCards.length + forYouCards.length },
+    { key: 'my-claims', label: 'My claims', count: myClaimCards.length },
+    { key: 'recording', label: 'Recording', count: recordingAssignmentCards.length },
+    { key: 'supporting', label: 'Supporting', count: supportingCards.length },
+    { key: 'discover', label: 'Discover', count: discoverCards.length },
+  ];
 
   return (
-    <div className="unified-home-grid">
-      {liveNowCards.length > 0 ? (
-        <HomeRail eyebrow="Live now" title="Jump back into live proof." cards={liveNowCards} featured />
+    <div className="unified-home-grid tabbed-home-grid">
+      <nav className="home-context-tabs" aria-label="Home sections">
+        {homeTabs.map((tab) => (
+          <button
+            className={activeHomeTab === tab.key ? 'selected' : ''}
+            type="button"
+            onClick={() => setActiveHomeTab(tab.key)}
+            aria-current={activeHomeTab === tab.key ? 'page' : undefined}
+            key={tab.key}
+          >
+            <span>{tab.label}</span>
+            <small>{tab.count}</small>
+          </button>
+        ))}
+      </nav>
+
+      {activeHomeTab === 'for-you' ? (
+        <>
+          {actionCards.length > 0 ? <ActionRail actions={actionCards.slice(0, 3)} /> : null}
+          <HomeRail
+            eyebrow="Worth opening"
+            title={hasPersonalActivity ? 'A few useful claims now.' : 'Start by creating or supporting a claim.'}
+            cards={forYouCards}
+            emptyText="No active claims yet. Create a claim or check Discover."
+            featured
+          />
+        </>
       ) : null}
 
-      {actionCards.length > 0 ? <ActionRail actions={actionCards} /> : null}
-
-      {myClaimCards.length > 0 ? (
-        <HomeRail eyebrow="My claims" title="Your claim rooms." cards={myClaimCards} />
+      {activeHomeTab === 'my-claims' ? (
+        <HomeRail
+          eyebrow="My claims"
+          title="Your claim rooms."
+          cards={myClaimCards}
+          emptyText="No claims yet. Create one when you are ready."
+        />
       ) : null}
 
-      {recordingAssignmentCards.length > 0 ? (
-        <HomeRail eyebrow="Recording" title="Proof roles assigned to you." cards={recordingAssignmentCards} />
+      {activeHomeTab === 'recording' ? (
+        <HomeRail
+          eyebrow="Recording"
+          title="Proof roles assigned to you."
+          cards={recordingAssignmentCards}
+          emptyText="No recorder assignments yet."
+        />
       ) : null}
 
-      {upcomingSupportedCards.length > 0 ? (
-        <HomeRail eyebrow="Upcoming supported" title="Claims you are backing." cards={upcomingSupportedCards} />
+      {activeHomeTab === 'supporting' ? (
+        <HomeRail
+          eyebrow="Supporting"
+          title="Claims you backed or watched."
+          cards={supportingCards}
+          emptyText="No supported claims yet."
+        />
       ) : null}
 
-      {pastActivityCards.length > 0 ? (
-        <HomeRail eyebrow="Past activity" title="Outcomes and review." cards={pastActivityCards} />
+      {activeHomeTab === 'discover' ? (
+        <HomeRail
+          eyebrow="Discover"
+          title="Other claims to support."
+          cards={discoverCards}
+          emptyText="No public claims are ready to discover yet."
+        />
       ) : null}
-
-      <HomeRail
-        eyebrow="Discover more"
-        title={hasPersonalActivity ? 'Other claims to support.' : 'Start by creating or supporting a claim.'}
-        cards={discoverCards}
-        emptyText="No public claims are ready to discover yet."
-      />
     </div>
   );
 }
