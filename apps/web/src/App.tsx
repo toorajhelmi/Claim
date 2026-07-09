@@ -3151,9 +3151,15 @@ function ClaimLivePage({ slug }: { slug: string }) {
   const liveRoomMode: LiveRoomMode = claim.status === 'live' ? 'official' : 'test';
   const canManageOfficialEvent = viewerRole === 'claimer';
 
-  async function runOfficialEventAction(action: 'start' | 'end') {
+  async function runOfficialEventAction(action: 'start' | 'end' | 'reopen') {
     setLiveLifecycleStatus('submitting');
-    setLiveLifecycleMessage(action === 'start' ? 'Starting official event...' : 'Ending official event...');
+    setLiveLifecycleMessage(
+      action === 'start'
+        ? 'Starting official event...'
+        : action === 'reopen'
+          ? 'Reopening official event...'
+          : 'Ending official event...',
+    );
 
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -3180,9 +3186,13 @@ function ClaimLivePage({ slug }: { slug: string }) {
         throw new Error(body.error || 'Could not update official event status.');
       }
 
-      setLiveLifecycleMessage(action === 'start'
-        ? 'Official event is live. Approved streamers can start streaming and supporters can watch.'
-        : 'Official event ended and moved to review.');
+      setLiveLifecycleMessage(
+        action === 'start'
+          ? 'Official event is live. Approved streamers can start streaming and supporters can watch.'
+          : action === 'reopen'
+            ? 'Official event is live again.'
+            : 'Official event ended and moved to review.',
+      );
       await reload();
     } catch (eventActionError) {
       setLiveLifecycleMessage(eventActionError instanceof Error ? eventActionError.message : 'Could not update official event status.');
@@ -3239,6 +3249,7 @@ function ClaimLivePage({ slug }: { slug: string }) {
             claim={data.claim}
             message={liveLifecycleMessage}
             onEnd={() => runOfficialEventAction('end')}
+            onReopen={() => runOfficialEventAction('reopen')}
             onStart={() => runOfficialEventAction('start')}
             status={liveLifecycleStatus}
           />
@@ -3295,6 +3306,7 @@ function OfficialEventPanel({
   claim,
   message,
   onEnd,
+  onReopen,
   onStart,
   status,
 }: {
@@ -3302,10 +3314,12 @@ function OfficialEventPanel({
   claim: Claim;
   message: string;
   onEnd: () => Promise<void>;
+  onReopen: () => Promise<void>;
   onStart: () => Promise<void>;
   status: 'idle' | 'submitting';
 }) {
   const isLive = claim.status === 'live';
+  const canReopen = claim.status === 'under_review';
   const isEnded = ['under_review', 'verified', 'not_proven', 'cancelled', 'disputed'].includes(claim.status);
   const canStart = !['draft', 'live', 'under_review', 'verified', 'not_proven', 'cancelled', 'disputed'].includes(claim.status);
 
@@ -3316,6 +3330,8 @@ function OfficialEventPanel({
       <p>
         {isLive
           ? 'Supporters can now watch the official room. Claimer and accepted recorders can publish streams.'
+          : canReopen
+            ? 'This official event has ended and is in review. Reopen it if you need to resume the live proof before final verification.'
           : isEnded
             ? 'This official event has ended. The claim is now in review or final result state.'
           : 'The private test room remains available until the claimer starts the official event.'}
@@ -3326,6 +3342,10 @@ function OfficialEventPanel({
             <button className="button button-ghost button-danger" disabled={status === 'submitting'} onClick={onEnd} type="button">
               {status === 'submitting' ? 'Ending event...' : 'End event and send to review'}
             </button>
+          ) : canReopen ? (
+            <button className="button button-primary" disabled={status === 'submitting'} onClick={onReopen} type="button">
+              {status === 'submitting' ? 'Reopening event...' : 'Reopen official event'}
+            </button>
           ) : isEnded ? (
             <p className="form-message">Official event controls are closed for this claim.</p>
           ) : (
@@ -3333,7 +3353,7 @@ function OfficialEventPanel({
               {status === 'submitting' ? 'Starting event...' : 'Start official event'}
             </button>
           )}
-          {!canStart && !isLive ? <p className="form-message">This claim cannot be started from its current status.</p> : null}
+          {!canStart && !isLive && !canReopen ? <p className="form-message">This claim cannot be started from its current status.</p> : null}
         </div>
       ) : (
         <p className="form-message">

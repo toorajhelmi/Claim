@@ -52,8 +52,8 @@ module.exports = async function handler(request, response) {
   const { claimSlug, action } = request.body ?? {};
   const normalizedAction = cleanText(action);
 
-  if (!claimSlug || !['start', 'end'].includes(normalizedAction)) {
-    response.status(400).json({ error: 'claimSlug and action=start|end are required' });
+  if (!claimSlug || !['start', 'end', 'reopen'].includes(normalizedAction)) {
+    response.status(400).json({ error: 'claimSlug and action=start|end|reopen are required' });
     return;
   }
 
@@ -143,6 +143,53 @@ module.exports = async function handler(request, response) {
       eventType: 'live_room_opened',
       title: 'Official event started',
       description: 'The claimer opened the official live proof event.',
+      now,
+    });
+
+    response.status(200).json({ claim: updatedClaim, liveRoom });
+    return;
+  }
+
+  if (normalizedAction === 'reopen') {
+    if (claim.status !== 'under_review') {
+      response.status(409).json({ error: 'Only an ended event in review can be reopened.' });
+      return;
+    }
+
+    const { data: liveRoom, error: liveRoomError } = await supabaseAdmin
+      .from('claim_live_rooms')
+      .upsert({
+        claim_id: claim.id,
+        livekit_room_name: roomName,
+        opened_at: now,
+        closed_at: null,
+      }, { onConflict: 'claim_id' })
+      .select('*')
+      .single();
+
+    if (liveRoomError) {
+      response.status(400).json({ error: liveRoomError.message });
+      return;
+    }
+
+    const { data: updatedClaim, error: updateError } = await supabaseAdmin
+      .from('claims')
+      .update({ status: 'live' })
+      .eq('id', claim.id)
+      .select('id, slug, status')
+      .single();
+
+    if (updateError) {
+      response.status(400).json({ error: updateError.message });
+      return;
+    }
+
+    await insertProofEvent({
+      supabaseAdmin,
+      claim,
+      eventType: 'live_room_opened',
+      title: 'Official event reopened',
+      description: 'The claimer reopened the official live proof event from review.',
       now,
     });
 
