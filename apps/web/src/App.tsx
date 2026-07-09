@@ -661,7 +661,7 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
           <div>
             <p className="eyebrow">{pageHeader.eyebrow}</p>
             <h1 className="page-title">{pageHeader.title}</h1>
-            <p className="page-lede">{pageHeader.lede}</p>
+            {pageHeader.lede ? <p className="page-lede">{pageHeader.lede}</p> : null}
           </div>
           {activeTab === 'home' ? (
             <div className="home-hero-actions">
@@ -866,7 +866,7 @@ function getUnifiedAppPageHeader(activeTab: UnifiedAppTabKey) {
   return {
     eyebrow: 'Klaimd home',
     title: 'Find something worth backing.',
-    lede: 'Home starts with public claims to explore. Your own claim rooms, recording roles, and pledges are one tap below.',
+    lede: '',
   };
 }
 
