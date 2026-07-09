@@ -255,6 +255,13 @@ type LiveRoomTile = {
   audioTrack?: RemoteAudioTrack;
 };
 
+type FloatingLiveInteraction = {
+  id: string;
+  content: string;
+  lane: number;
+  kind: 'reaction' | 'prompt';
+};
+
 const liveReactionOptions = [
   { label: 'Fire', value: 'Fire' },
   { label: 'Verify', value: 'Verify' },
@@ -3624,7 +3631,9 @@ function LiveRoomSession({
   const [supporterInputs, setSupporterInputs] = useState<SupporterInput[]>([]);
   const [chatDraft, setChatDraft] = useState('');
   const [supporterInputStatus, setSupporterInputStatus] = useState('');
-  const [recentReaction, setRecentReaction] = useState('');
+  const [floatingInteractions, setFloatingInteractions] = useState<FloatingLiveInteraction[]>([]);
+  const seenFloatingInteractionIdsRef = useRef<Set<string>>(new Set());
+  const supporterInputsLoadedRef = useRef(false);
   const isOfficialMode = mode === 'official';
 
   useEffect(() => {
@@ -3638,6 +3647,8 @@ function LiveRoomSession({
   useEffect(() => {
     if (!isOfficialMode) {
       setSupporterInputs([]);
+      seenFloatingInteractionIdsRef.current.clear();
+      supporterInputsLoadedRef.current = false;
       return undefined;
     }
 
@@ -3653,7 +3664,20 @@ function LiveRoomSession({
         .limit(40);
 
       if (!cancelled) {
-        setSupporterInputs(((inputRows ?? []) as SupporterInput[]).reverse());
+        const nextInputs = ((inputRows ?? []) as SupporterInput[]).reverse();
+        const seenIds = seenFloatingInteractionIdsRef.current;
+        const shouldAnimateNewInteractions = supporterInputsLoadedRef.current && connectionState === 'connected';
+
+        setSupporterInputs(nextInputs);
+        nextInputs.forEach((input) => {
+          if ((input.input_type === 'reaction' || input.input_type === 'prompt') && !seenIds.has(input.id)) {
+            if (shouldAnimateNewInteractions) {
+              addFloatingInteraction(input.input_type, input.content);
+            }
+            seenIds.add(input.id);
+          }
+        });
+        supporterInputsLoadedRef.current = true;
       }
     }
 
@@ -3665,6 +3689,22 @@ function LiveRoomSession({
       window.clearInterval(intervalId);
     };
   }, [claim.id, connectionState, isOfficialMode]);
+
+  function addFloatingInteraction(kind: 'reaction' | 'prompt', content: string) {
+    const floatingId = `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setFloatingInteractions((current) => [
+      ...current.slice(-8),
+      {
+        id: floatingId,
+        content,
+        kind,
+        lane: Math.floor(Math.random() * 4),
+      },
+    ]);
+    window.setTimeout(() => {
+      setFloatingInteractions((current) => current.filter((interaction) => interaction.id !== floatingId));
+    }, 2200);
+  }
 
   async function requestLiveRoomToken(sessionMode: LiveRoomMode) {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -3913,7 +3953,7 @@ function LiveRoomSession({
     }
   }
 
-  const liveChatInputs = supporterInputs.filter((input) => input.input_type === 'chat' || input.input_type === 'prompt').slice(-3);
+  const liveChatInputs = supporterInputs.filter((input) => input.input_type === 'chat' || input.input_type === 'prompt').slice(-5);
   const reactionCounts = supporterInputs
     .filter((input) => input.input_type === 'reaction')
     .reduce<Record<string, number>>((counts, input) => {
@@ -3946,9 +3986,8 @@ function LiveRoomSession({
     setSupporterInputStatus('');
     setSupporterInputs((current) => [...current.slice(-39), optimisticInput]);
 
-    if (inputType === 'reaction') {
-      setRecentReaction(content);
-      window.setTimeout(() => setRecentReaction(''), 1100);
+    if (inputType === 'reaction' || inputType === 'prompt') {
+      addFloatingInteraction(inputType, content);
     }
 
     const { data: insertedInput, error: insertError } = await supabase
@@ -3966,6 +4005,10 @@ function LiveRoomSession({
       setSupporterInputs((current) => current.filter((input) => input.id !== optimisticInput.id));
       setSupporterInputStatus('Could not send right now.');
       return;
+    }
+
+    if (inputType === 'reaction' || inputType === 'prompt') {
+      seenFloatingInteractionIdsRef.current.add(insertedInput.id);
     }
 
     setSupporterInputs((current) => current.map((input) => (
@@ -4028,15 +4071,19 @@ function LiveRoomSession({
               {isOfficialMode ? (
                 <>
                   <div className="live-chat-messages" aria-live="polite">
-                    {liveChatInputs.length > 0 ? liveChatInputs.map((input) => (
-                      <div className={`live-chat-message ${input.input_type === 'prompt' ? 'is-prompt' : ''}`} key={input.id}>
+                    {liveChatInputs.length > 0 ? liveChatInputs.map((input, index) => {
+                      const age = Math.min(4, liveChatInputs.length - index - 1);
+
+                      return (
+                      <div className={`live-chat-message live-chat-message-age-${age} ${input.input_type === 'prompt' ? 'is-prompt' : ''}`} key={input.id}>
                         <span>
                           <strong>{input.supporter_name || 'Supporter'}</strong>
                           <small>{formatTime(input.created_at)}</small>
                         </span>
                         <p>{input.input_type === 'prompt' ? `Prompt: ${input.content}` : input.content}</p>
                       </div>
-                    )) : (
+                      );
+                    }) : (
                       <p><strong>Klaimd</strong> Official chat is open. Messages and prompts will show here.</p>
                     )}
                   </div>
@@ -4086,7 +4133,18 @@ function LiveRoomSession({
               )}
             </div>
           ) : null}
-          {recentReaction ? <div className="live-reaction-burst" aria-hidden="true">{recentReaction}</div> : null}
+          {floatingInteractions.length > 0 ? (
+            <div className="live-floating-interactions" aria-hidden="true">
+              {floatingInteractions.map((interaction) => (
+                <span
+                  className={`live-floating-interaction live-floating-interaction-${interaction.kind} live-floating-lane-${interaction.lane}`}
+                  key={interaction.id}
+                >
+                  {interaction.kind === 'prompt' ? `Prompt: ${interaction.content}` : interaction.content}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : mode === 'official' ? (
         <div className="live-session-entry">
