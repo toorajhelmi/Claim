@@ -506,9 +506,6 @@ function HomePage() {
                 <p className="eyebrow">My claims</p>
                 <h2>Drafts and active claims</h2>
               </div>
-              <a className="button button-ghost" href="/claims/new">
-                Create
-              </a>
             </div>
             <ClaimCardList
               claims={myClaims}
@@ -930,22 +927,24 @@ function AppChrome({ children, immersive = false }: { children: ReactNode; immer
 
   return (
     <div className={immersive ? 'app-chrome app-chrome-immersive' : 'app-chrome app-chrome-product'}>
-      {immersive ? null : <header className="site-header">
-        <a className="brand" href="/" aria-label={`${appConfig.name} home`}>
-          <span className="brand-mark">{appConfig.name.charAt(0)}</span>
-          <span>{appConfig.name}</span>
-        </a>
-        <nav className="nav-links" aria-label="Primary navigation">
-          <a href="/claims/new">Create</a>
-          <a href="/claims/cross-city-by-sunset">Demo claim</a>
-          <a href="/">Landing</a>
-        </nav>
-        {isCreatePage ? null : (
-          <a className="nav-cta" href="/claims/new">
-            Run a claim
-          </a>
-        )}
-      </header>}
+      {immersive ? null : (
+        <details className="app-menu">
+          <summary aria-label="Open navigation menu">
+            <span className="brand-mark">{appConfig.name.charAt(0)}</span>
+            <span className="hamburger-lines" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+          </summary>
+          <nav aria-label="App navigation">
+            <a href="/">Home</a>
+            {isCreatePage ? null : <a href="/claims/new">New claim</a>}
+            <a href="/claims/cross-city-by-sunset">Demo claim</a>
+            <a href="/#examples">Landing</a>
+          </nav>
+        </details>
+      )}
       {children}
     </div>
   );

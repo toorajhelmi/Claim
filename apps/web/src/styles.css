@@ -88,6 +88,11 @@ canvas {
   background: var(--bg);
 }
 
+.app-chrome-product .app-page,
+.app-chrome-product .auth-page {
+  padding-top: clamp(4.25rem, 8vw, 5rem);
+}
+
 .grain {
   position: fixed;
   inset: 0;
@@ -193,8 +198,76 @@ canvas {
   color: #061006;
   font-weight: 900;
   border-color: rgba(112, 255, 139, 0.55);
-  border-radius: 999px;
+  border-radius: 1rem;
   background: linear-gradient(135deg, var(--green), var(--cyan));
+}
+
+.app-menu {
+  position: fixed;
+  top: max(0.75rem, env(safe-area-inset-top));
+  left: max(0.75rem, env(safe-area-inset-left));
+  z-index: 30;
+  width: fit-content;
+  max-width: calc(100vw - 1.5rem);
+}
+
+.app-menu summary {
+  display: inline-flex;
+  gap: 0.65rem;
+  align-items: center;
+  min-height: 3rem;
+  padding: 0.42rem 0.7rem 0.42rem 0.42rem;
+  color: #fff;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: rgba(8, 11, 18, 0.9);
+  box-shadow: 0 16px 46px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  list-style: none;
+  backdrop-filter: blur(18px);
+}
+
+.app-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.hamburger-lines {
+  display: grid;
+  gap: 0.24rem;
+  width: 1.15rem;
+}
+
+.hamburger-lines span {
+  display: block;
+  height: 0.12rem;
+  border-radius: 999px;
+  background: rgba(248, 251, 255, 0.9);
+}
+
+.app-menu nav {
+  display: grid;
+  gap: 0.35rem;
+  width: min(14rem, calc(100vw - 1.5rem));
+  margin-top: 0.5rem;
+  padding: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: rgba(8, 11, 18, 0.94);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(18px);
+}
+
+.app-menu nav a {
+  padding: 0.75rem 0.85rem;
+  color: rgba(248, 251, 255, 0.84);
+  font-size: 0.9rem;
+  font-weight: 850;
+  border-radius: 0.72rem;
+}
+
+.app-menu nav a:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .section-shell {
@@ -300,7 +373,7 @@ h3 {
   font-weight: 900;
   letter-spacing: -0.005em;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: 0.92rem;
   transition:
     opacity 160ms ease,
     transform 160ms ease,
