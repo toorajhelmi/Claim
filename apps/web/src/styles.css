@@ -2433,6 +2433,15 @@ h3 {
   min-height: 32rem;
 }
 
+.live-video-panel-compact {
+  min-height: 0;
+  padding: 1rem;
+}
+
+.live-video-panel-compact .livekit-panel {
+  gap: 0.65rem;
+}
+
 .live-stage-page {
   position: fixed;
   inset: 0;
@@ -2674,25 +2683,20 @@ h3 {
 
 .live-chat-overlay {
   position: absolute;
-  right: 1rem;
+  right: auto;
   bottom: calc(max(0.75rem, env(safe-area-inset-bottom)) + 4.8rem);
+  left: 0.8rem;
   z-index: 3;
   display: grid;
-  gap: 0.65rem;
-  width: min(23rem, calc(100% - 2rem));
-  padding: 0.8rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 1.2rem;
-  background: rgba(3, 6, 12, 0.76);
-  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.36);
-  backdrop-filter: blur(16px);
+  gap: 0.4rem;
+  width: min(21rem, calc(100% - 5.2rem));
+  padding: 0;
+  pointer-events: none;
 }
 
 .live-chat-messages {
   display: grid;
-  gap: 0.45rem;
-  max-height: 12rem;
-  overflow-y: auto;
+  gap: 0.32rem;
 }
 
 .live-chat-messages p {
@@ -2704,11 +2708,14 @@ h3 {
 
 .live-chat-message {
   display: grid;
-  gap: 0.28rem;
-  padding: 0.55rem 0.65rem;
+  gap: 0.18rem;
+  max-width: 100%;
+  padding: 0.45rem 0.58rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0.85rem;
-  background: rgba(255, 255, 255, 0.07);
+  border-radius: 0.95rem;
+  background: rgba(3, 6, 12, 0.62);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px);
 }
 
 .live-chat-message.is-prompt {
@@ -2784,24 +2791,27 @@ h3 {
 
 .live-chat-form {
   flex-wrap: nowrap;
+  pointer-events: auto;
 }
 
 .live-chat-form .button {
   flex: 0 0 auto;
-  min-height: 2.75rem;
-  padding-inline: 0.9rem;
+  min-height: 2.45rem;
+  padding-inline: 0.78rem;
+  font-size: 0.78rem;
 }
 
 .live-chat-overlay input,
 .live-chat-form input {
   width: 100%;
   min-width: 0;
-  min-height: 2.75rem;
+  min-height: 2.45rem;
   padding: 0 0.8rem;
   color: rgba(248, 251, 255, 0.76);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(3, 6, 12, 0.58);
+  backdrop-filter: blur(12px);
 }
 
 .live-chat-status {
@@ -2810,10 +2820,48 @@ h3 {
   font-size: 0.78rem;
 }
 
+.live-interaction-menu {
+  justify-self: start;
+  pointer-events: auto;
+}
+
+.live-interaction-menu summary {
+  display: inline-flex;
+  min-height: 2.2rem;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  color: rgba(248, 251, 255, 0.9);
+  font-size: 0.75rem;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(3, 6, 12, 0.58);
+  cursor: pointer;
+  list-style: none;
+  text-transform: uppercase;
+  backdrop-filter: blur(12px);
+}
+
+.live-interaction-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.live-interaction-menu[open] {
+  display: grid;
+  gap: 0.45rem;
+  width: min(21rem, calc(100vw - 1.6rem));
+  padding: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1.1rem;
+  background: rgba(3, 6, 12, 0.7);
+  backdrop-filter: blur(14px);
+}
+
 .live-reaction-burst {
   position: absolute;
-  right: 1.4rem;
-  bottom: calc(max(0.75rem, env(safe-area-inset-bottom)) + 15.5rem);
+  right: 1rem;
+  bottom: calc(max(0.75rem, env(safe-area-inset-bottom)) + 8.5rem);
   z-index: 4;
   color: #fff;
   font-size: clamp(1.35rem, 5vw, 2.4rem);
@@ -3085,18 +3133,18 @@ h3 {
   }
 
   .live-chat-overlay {
-    right: 0.5rem;
-    bottom: calc(max(0.75rem, env(safe-area-inset-bottom)) + 4.4rem);
-    width: calc(100% - 1rem);
-    padding: 0.65rem;
+    right: auto;
+    bottom: calc(max(0.75rem, env(safe-area-inset-bottom)) + 4.6rem);
+    left: 0.55rem;
+    width: min(20rem, calc(100% - 4.8rem));
   }
 
   .live-chat-form {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .live-chat-form .button {
-    width: 100%;
+    width: auto;
   }
 
   .live-prompt-row button {

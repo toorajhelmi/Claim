@@ -3233,7 +3233,7 @@ function ClaimLivePage({ slug }: { slug: string }) {
         {!liveStageActive && !isOfficialLive ? <ClaimHeader claim={data.claim} label="LIVE ROOM" /> : null}
         {!isAfterOfficialLive ? (
           <div className={`mvp-layout live-layout ${isOfficialLive ? 'live-layout-solo' : ''}`}>
-            <section className={`mvp-panel live-video-panel ${liveStageActive ? 'live-video-panel-active' : ''}`}>
+            <section className={`mvp-panel live-video-panel ${isOfficialLive && !liveStageActive ? 'live-video-panel-compact' : ''} ${liveStageActive ? 'live-video-panel-active' : ''}`}>
               {!liveStageActive && !isOfficialLive ? <p className="eyebrow">Room preview</p> : null}
               <LiveRoomSession
                 claim={data.claim}
@@ -3825,7 +3825,7 @@ function LiveRoomSession({
     }
   }
 
-  const liveChatInputs = supporterInputs.filter((input) => input.input_type === 'chat' || input.input_type === 'prompt').slice(-12);
+  const liveChatInputs = supporterInputs.filter((input) => input.input_type === 'chat' || input.input_type === 'prompt').slice(-3);
   const reactionCounts = supporterInputs
     .filter((input) => input.input_type === 'reaction')
     .reduce<Record<string, number>>((counts, input) => {
@@ -3952,26 +3952,6 @@ function LiveRoomSession({
                       <p><strong>Klaimd</strong> Official chat is open. Messages and prompts will show here.</p>
                     )}
                   </div>
-                  <div className="live-reaction-row" aria-label="Quick reactions">
-                    {liveReactionOptions.map((reaction) => (
-                      <button
-                        aria-label={`Send ${reaction.label} reaction`}
-                        key={reaction.value}
-                        onClick={() => void submitSupporterInput('reaction', reaction.value)}
-                        type="button"
-                      >
-                        <span>{reaction.value}</span>
-                        <small>{reactionCounts[reaction.value] ?? 0}</small>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="live-prompt-row" aria-label="Structured live prompts">
-                    {livePromptOptions.map((prompt) => (
-                      <button key={prompt} onClick={() => void submitSupporterInput('prompt', prompt)} type="button">
-                        {prompt}
-                      </button>
-                    ))}
-                  </div>
                   <form className="live-chat-form" onSubmit={submitChatMessage}>
                     <input
                       aria-label="Chat message"
@@ -3982,6 +3962,29 @@ function LiveRoomSession({
                     />
                     <button className="button button-primary" type="submit">Send</button>
                   </form>
+                  <details className="live-interaction-menu">
+                    <summary>Interact</summary>
+                    <div className="live-reaction-row" aria-label="Quick reactions">
+                      {liveReactionOptions.map((reaction) => (
+                        <button
+                          aria-label={`Send ${reaction.label} reaction`}
+                          key={reaction.value}
+                          onClick={() => void submitSupporterInput('reaction', reaction.value)}
+                          type="button"
+                        >
+                          <span>{reaction.value}</span>
+                          <small>{reactionCounts[reaction.value] ?? 0}</small>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="live-prompt-row" aria-label="Structured live prompts">
+                      {livePromptOptions.map((prompt) => (
+                        <button key={prompt} onClick={() => void submitSupporterInput('prompt', prompt)} type="button">
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  </details>
                   {supporterInputStatus ? <p className="live-chat-status">{supporterInputStatus}</p> : null}
                 </>
               ) : (
