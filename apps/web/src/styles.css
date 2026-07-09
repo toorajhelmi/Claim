@@ -1568,6 +1568,10 @@ h3 {
   gap: 0.7rem;
 }
 
+.discovery-home-grid {
+  gap: 0.85rem;
+}
+
 .home-context-tabs {
   display: flex;
   gap: 0.42rem;
@@ -1650,6 +1654,7 @@ h3 {
 }
 
 .home-action-grid,
+.home-shortcut-grid,
 .home-activity-list {
   display: flex;
   gap: 0.65rem;
@@ -1661,12 +1666,14 @@ h3 {
 }
 
 .home-action-grid::-webkit-scrollbar,
+.home-shortcut-grid::-webkit-scrollbar,
 .home-activity-list::-webkit-scrollbar,
 .unified-claim-card-list::-webkit-scrollbar {
   display: none;
 }
 
-.home-action-card {
+.home-action-card,
+.home-shortcut-card {
   display: grid;
   flex: 0 0 min(18rem, 82vw);
   gap: 0.35rem;
@@ -1681,6 +1688,8 @@ h3 {
 
 .home-action-card span,
 .home-action-card small,
+.home-shortcut-card span,
+.home-shortcut-card small,
 .unified-claim-card em {
   justify-self: start;
   color: var(--green);
@@ -1691,17 +1700,37 @@ h3 {
   text-transform: uppercase;
 }
 
-.home-action-card strong {
+.home-action-card strong,
+.home-shortcut-card strong {
   color: #fff;
   font-size: 1rem;
   line-height: 1.25;
 }
 
-.home-action-card p {
+.home-action-card p,
+.home-shortcut-card p {
   margin: 0;
   color: var(--muted);
   font-size: 0.86rem;
   line-height: 1.45;
+}
+
+.home-shortcut-card {
+  position: relative;
+  min-height: 7.2rem;
+}
+
+.home-shortcut-card small {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  display: grid;
+  min-width: 1.65rem;
+  height: 1.65rem;
+  place-items: center;
+  color: #041006;
+  border-radius: 999px;
+  background: var(--green);
 }
 
 .claim-card-list {

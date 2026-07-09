@@ -231,8 +231,8 @@ type ClaimBundle = {
 };
 
 type ClaimDetailTabKey = 'overview' | 'backing' | 'proof' | 'live';
-type HomeSurfaceTabKey = 'for-you' | 'my-claims' | 'recording' | 'supporting' | 'discover';
-type UnifiedAppTabKey = 'home' | 'discover' | 'activity' | 'profile';
+type UnifiedAppTabKey = 'home' | 'discover' | 'activity' | 'profile' | 'my-claims' | 'recording' | 'supporting';
+type AppNavigationKey = 'home' | 'discover' | 'activity' | 'profile' | 'create';
 type LiveViewerRole = 'claimer' | 'recorder' | 'supporter';
 type LiveRoomMode = 'test' | 'official';
 
@@ -285,7 +285,7 @@ const claimDetailTabs: Array<{ key: ClaimDetailTabKey; label: string }> = [
   { key: 'live', label: 'Live' },
 ];
 
-const appNavigationTabs: Array<{ key: UnifiedAppTabKey | 'create'; label: string; href: string }> = [
+const appNavigationTabs: Array<{ key: AppNavigationKey; label: string; href: string }> = [
   { key: 'home', label: 'Home', href: '/' },
   { key: 'discover', label: 'Discover', href: '/discover' },
   { key: 'create', label: 'Create', href: '/claims/new' },
@@ -489,6 +489,15 @@ type HomeActionCard = {
   ctaLabel: string;
 };
 
+type HomeShortcutCard = {
+  id: string;
+  href: string;
+  label: string;
+  title: string;
+  detail: string;
+  count: number;
+};
+
 type HomeActivityCard = {
   id: string;
   title: string;
@@ -509,8 +518,6 @@ type UnifiedHomeData = {
   pledgesByClaimId: Map<string, HomePledge>;
 };
 
-const liveClaimStatuses: ClaimStatus[] = ['live'];
-const upcomingClaimStatuses: ClaimStatus[] = ['preview', 'open_for_backing', 'threshold_met', 'scheduled'];
 const finalOrReviewClaimStatuses: ClaimStatus[] = ['under_review', 'verified', 'not_proven', 'cancelled', 'disputed'];
 const discoverClaimStatuses: ClaimStatus[] = ['preview', 'open_for_backing', 'threshold_met', 'scheduled', 'live'];
 
@@ -635,24 +642,16 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
 
     return Boolean(invite);
   });
-  const liveNowCards = uniqueHomeClaimCards([
-    ...ownedCards.filter((card) => liveClaimStatuses.includes(card.claim.status)),
-    ...activeRecorderCards.filter((card) => liveClaimStatuses.includes(card.claim.status)),
-    ...supportedCards.filter((card) => liveClaimStatuses.includes(card.claim.status)),
-  ]);
-  const upcomingSupportedCards = supportedCards.filter((card) => upcomingClaimStatuses.includes(card.claim.status));
   const recordingAssignmentCards = activeRecorderCards.filter((card) => !finalOrReviewClaimStatuses.includes(card.claim.status));
-  const pastActivityCards = uniqueHomeClaimCards([
-    ...ownedCards.filter((card) => finalOrReviewClaimStatuses.includes(card.claim.status)),
-    ...activeRecorderCards.filter((card) => finalOrReviewClaimStatuses.includes(card.claim.status)),
-    ...supportedCards.filter((card) => finalOrReviewClaimStatuses.includes(card.claim.status)),
-  ]);
   const actionCards = createHomeActionCards(homeData, ownedCards, activeRecorderCards, supportedCards);
   const activityCards = createActivityCards(homeData, ownedCards, activeRecorderCards, supportedCards);
-  const totalActiveCount = new Set([
-    ...liveNowCards.map((card) => card.claim.id),
-    ...actionCards.map((action) => action.claimId),
-  ]).size;
+  const shortcutCards = createHomeShortcutCards({
+    actionCount: new Set(actionCards.map((action) => action.claimId)).size,
+    activityCount: activityCards.length,
+    myClaimCount: ownedCards.length,
+    recordingCount: recordingAssignmentCards.length,
+    supportedCount: supportedCards.length,
+  });
   const pageHeader = getUnifiedAppPageHeader(activeTab);
 
   return (
@@ -666,8 +665,7 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
           </div>
           {activeTab === 'home' ? (
             <div className="home-hero-actions">
-              <span>{totalActiveCount} active action{totalActiveCount === 1 ? '' : 's'}</span>
-              <a className="button button-primary" href="/claims/new">Create claim</a>
+              <a className="button button-ghost" href="/claims/new">Create claim</a>
             </div>
           ) : null}
         </section>
@@ -675,19 +673,38 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
         {activeTab === 'home' ? (
           <UnifiedHomeView
             actionCards={actionCards}
-            discoverCards={discoverCards.slice(0, 4)}
-            liveNowCards={liveNowCards}
-            myClaimCards={ownedCards}
-            pastActivityCards={pastActivityCards}
-            recordingAssignmentCards={recordingAssignmentCards}
-            supportedClaimCards={supportedCards}
-            upcomingSupportedCards={upcomingSupportedCards}
+            discoverCards={prioritizeHomeDiscoveryCards(discoverCards).slice(0, 8)}
+            shortcutCards={shortcutCards}
           />
         ) : null}
 
         {activeTab === 'discover' ? <DiscoverView claimCards={discoverCards} /> : null}
         {activeTab === 'activity' ? <ActivityView activityCards={activityCards} /> : null}
         {activeTab === 'profile' ? <ProfileView data={homeData} /> : null}
+        {activeTab === 'my-claims' ? (
+          <HomeRail
+            eyebrow="My claims"
+            title="Your claim rooms."
+            cards={ownedCards}
+            emptyText="No claims yet. Create one when you are ready."
+          />
+        ) : null}
+        {activeTab === 'recording' ? (
+          <HomeRail
+            eyebrow="Recording"
+            title="Proof roles assigned to you."
+            cards={recordingAssignmentCards}
+            emptyText="No active recorder assignments yet."
+          />
+        ) : null}
+        {activeTab === 'supporting' ? (
+          <HomeRail
+            eyebrow="Supporting"
+            title="Claims you pledged to."
+            cards={supportedCards}
+            emptyText="No pledged claims yet. Discover a claim to support."
+          />
+        ) : null}
       </main>
     </AppChrome>
   );
@@ -696,113 +713,25 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
 function UnifiedHomeView({
   actionCards,
   discoverCards,
-  liveNowCards,
-  myClaimCards,
-  pastActivityCards,
-  recordingAssignmentCards,
-  supportedClaimCards,
-  upcomingSupportedCards,
+  shortcutCards,
 }: {
   actionCards: HomeActionCard[];
   discoverCards: HomeClaimCard[];
-  liveNowCards: HomeClaimCard[];
-  myClaimCards: HomeClaimCard[];
-  pastActivityCards: HomeClaimCard[];
-  recordingAssignmentCards: HomeClaimCard[];
-  supportedClaimCards: HomeClaimCard[];
-  upcomingSupportedCards: HomeClaimCard[];
+  shortcutCards: HomeShortcutCard[];
 }) {
-  const [activeHomeTab, setActiveHomeTab] = useState<HomeSurfaceTabKey>('for-you');
-  const hasPersonalActivity =
-    liveNowCards.length > 0 ||
-    actionCards.length > 0 ||
-    myClaimCards.length > 0 ||
-    recordingAssignmentCards.length > 0 ||
-    upcomingSupportedCards.length > 0 ||
-    pastActivityCards.length > 0;
-  const actionClaimIds = new Set(actionCards.map((action) => action.claimId));
-  const supportingCards = uniqueHomeClaimCards(supportedClaimCards);
-  const forYouCards = uniqueHomeClaimCards([
-    ...liveNowCards,
-    ...upcomingSupportedCards.slice(0, 1),
-    ...discoverCards.slice(0, 3),
-  ]).filter((card) => !actionClaimIds.has(card.claim.id)).slice(0, 4);
-  const showForYouRail = actionCards.length === 0 || forYouCards.length > 0;
-  const homeTabs: Array<{ key: HomeSurfaceTabKey; label: string; count: number }> = [
-    { key: 'for-you', label: 'For you', count: actionCards.length + forYouCards.length },
-    { key: 'my-claims', label: 'My claims', count: myClaimCards.length },
-    { key: 'recording', label: 'Recording', count: recordingAssignmentCards.length },
-    { key: 'supporting', label: 'Supporting', count: supportingCards.length },
-    { key: 'discover', label: 'Discover', count: discoverCards.length },
-  ];
-
   return (
-    <div className="unified-home-grid tabbed-home-grid">
-      <nav className="home-context-tabs" aria-label="Home sections">
-        {homeTabs.map((tab) => (
-          <button
-            className={activeHomeTab === tab.key ? 'selected' : ''}
-            type="button"
-            onClick={() => setActiveHomeTab(tab.key)}
-            aria-current={activeHomeTab === tab.key ? 'page' : undefined}
-            key={tab.key}
-          >
-            <span>{tab.label}</span>
-            <small>{tab.count}</small>
-          </button>
-        ))}
-      </nav>
-
-      {activeHomeTab === 'for-you' ? (
-        <>
-          {actionCards.length > 0 ? <ActionRail actions={actionCards.slice(0, 3)} /> : null}
-          {showForYouRail ? (
-            <HomeRail
-              eyebrow={actionCards.length > 0 ? 'Also worth opening' : 'Worth opening'}
-              title={hasPersonalActivity ? 'A few useful claims now.' : 'Start by creating or supporting a claim.'}
-              cards={forYouCards}
-              emptyText="No active claims yet. Create a claim or check Discover."
-              featured={actionCards.length === 0}
-            />
-          ) : null}
-        </>
-      ) : null}
-
-      {activeHomeTab === 'my-claims' ? (
-        <HomeRail
-          eyebrow="My claims"
-          title="Your claim rooms."
-          cards={myClaimCards}
-          emptyText="No claims yet. Create one when you are ready."
-        />
-      ) : null}
-
-      {activeHomeTab === 'recording' ? (
-        <HomeRail
-          eyebrow="Recording"
-          title="Proof roles assigned to you."
-          cards={recordingAssignmentCards}
-          emptyText="No recorder assignments yet."
-        />
-      ) : null}
-
-      {activeHomeTab === 'supporting' ? (
-        <HomeRail
-          eyebrow="Supporting"
-          title="Claims you pledged to."
-          cards={supportingCards}
-          emptyText="No pledged claims yet. Discover a claim to support."
-        />
-      ) : null}
-
-      {activeHomeTab === 'discover' ? (
-        <HomeRail
-          eyebrow="Discover"
-          title="Other claims to support."
-          cards={discoverCards}
-          emptyText="No public claims are ready to discover yet."
-        />
-      ) : null}
+    <div className="unified-home-grid discovery-home-grid">
+      <HomeRail
+        eyebrow="Discover"
+        title="Claims to back or watch."
+        cards={discoverCards}
+        emptyText="No public claims are ready to discover yet."
+        featured
+        ctaHref="/discover"
+        ctaLabel="Browse all"
+      />
+      <ShortcutRail shortcuts={shortcutCards} />
+      {actionCards.length > 0 ? <ActionRail actions={actionCards.slice(0, 3)} /> : null}
     </div>
   );
 }
@@ -910,21 +839,49 @@ function getUnifiedAppPageHeader(activeTab: UnifiedAppTabKey) {
     };
   }
 
+  if (activeTab === 'my-claims') {
+    return {
+      eyebrow: 'My claims',
+      title: 'Your claim rooms.',
+      lede: 'Drafts, active events, and outcomes you created.',
+    };
+  }
+
+  if (activeTab === 'recording') {
+    return {
+      eyebrow: 'Recording',
+      title: 'Proof roles.',
+      lede: 'Claims where you have an accepted or pending recording role.',
+    };
+  }
+
+  if (activeTab === 'supporting') {
+    return {
+      eyebrow: 'Supporting',
+      title: 'Your pledges.',
+      lede: 'Claims you backed and may want to watch, revisit, or follow through.',
+    };
+  }
+
   return {
     eyebrow: 'Klaimd home',
-    title: 'Home.',
-    lede: 'Your next claim actions first. Use the sections below when you need a specific context.',
+    title: 'Find something worth backing.',
+    lede: 'Home starts with public claims to explore. Your own claim rooms, recording roles, and pledges are one tap below.',
   };
 }
 
 function HomeRail({
   cards,
+  ctaHref,
+  ctaLabel,
   emptyText,
   eyebrow,
   featured = false,
   title,
 }: {
   cards: HomeClaimCard[];
+  ctaHref?: string;
+  ctaLabel?: string;
   emptyText?: string;
   eyebrow: string;
   featured?: boolean;
@@ -937,6 +894,7 @@ function HomeRail({
           <p className="eyebrow">{eyebrow}</p>
           <h2>{title}</h2>
         </div>
+        {ctaHref && ctaLabel ? <a className="button button-ghost" href={ctaHref}>{ctaLabel}</a> : null}
       </div>
       <HomeClaimCardList cards={cards} emptyText={emptyText} />
     </section>
@@ -955,6 +913,29 @@ function ActionRail({ actions }: { actions: HomeActionCard[] }) {
             <strong>{action.title}</strong>
             <p>{action.detail}</p>
             <small>{action.ctaLabel}</small>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ShortcutRail({ shortcuts }: { shortcuts: HomeShortcutCard[] }) {
+  return (
+    <section className="mvp-panel unified-section-panel shortcut-panel">
+      <div className="panel-heading-row">
+        <div>
+          <p className="eyebrow">Your areas</p>
+          <h2>Jump into your claim work.</h2>
+        </div>
+      </div>
+      <div className="home-shortcut-grid">
+        {shortcuts.map((shortcut) => (
+          <a className="home-shortcut-card" href={shortcut.href} key={shortcut.id}>
+            <span>{shortcut.label}</span>
+            <strong>{shortcut.title}</strong>
+            <p>{shortcut.detail}</p>
+            <small>{shortcut.count}</small>
           </a>
         ))}
       </div>
@@ -1151,6 +1132,55 @@ function createHomeActionCards(
   return uniqueHomeActionCards(actions).slice(0, 6);
 }
 
+function createHomeShortcutCards({
+  actionCount,
+  activityCount,
+  myClaimCount,
+  recordingCount,
+  supportedCount,
+}: {
+  actionCount: number;
+  activityCount: number;
+  myClaimCount: number;
+  recordingCount: number;
+  supportedCount: number;
+}): HomeShortcutCard[] {
+  return [
+    {
+      id: 'my-claims',
+      href: '/my-claims',
+      label: 'My claims',
+      title: `${myClaimCount} claim room${myClaimCount === 1 ? '' : 's'}`,
+      detail: 'Drafts, active events, and outcomes you own.',
+      count: myClaimCount,
+    },
+    {
+      id: 'recording',
+      href: '/recording',
+      label: 'Recording',
+      title: `${recordingCount} proof role${recordingCount === 1 ? '' : 's'}`,
+      detail: 'Accepted or pending recorder assignments.',
+      count: recordingCount,
+    },
+    {
+      id: 'supporting',
+      href: '/supporting',
+      label: 'Supporting',
+      title: `${supportedCount} pledge${supportedCount === 1 ? '' : 's'}`,
+      detail: 'Claims you backed, watched, or need to revisit.',
+      count: supportedCount,
+    },
+    {
+      id: 'activity',
+      href: '/activity',
+      label: 'Activity',
+      title: `${activityCount} recent update${activityCount === 1 ? '' : 's'}`,
+      detail: actionCount > 0 ? `${actionCount} need your next move.` : 'Status across your claim relationships.',
+      count: activityCount,
+    },
+  ];
+}
+
 function createActivityCards(
   homeData: UnifiedHomeData,
   ownedCards: HomeClaimCard[],
@@ -1177,6 +1207,32 @@ function createActivityCards(
       };
     })
     .slice(0, 12);
+}
+
+function prioritizeHomeDiscoveryCards(cards: HomeClaimCard[]) {
+  const statusPriority: Record<ClaimStatus, number> = {
+    live: 0,
+    open_for_backing: 1,
+    threshold_met: 2,
+    scheduled: 3,
+    preview: 4,
+    draft: 5,
+    under_review: 6,
+    verified: 7,
+    not_proven: 8,
+    cancelled: 9,
+    disputed: 10,
+  };
+
+  return [...cards].sort((first, second) => {
+    const priorityDelta = statusPriority[first.claim.status] - statusPriority[second.claim.status];
+
+    if (priorityDelta !== 0) {
+      return priorityDelta;
+    }
+
+    return second.claim.pledge_pool_cents - first.claim.pledge_pool_cents;
+  });
 }
 
 function uniqueHomeClaimCards(cards: HomeClaimCard[]) {
@@ -1612,6 +1668,18 @@ function getRoute(pathname: string):
     return { name: 'unified-app', tab: 'profile' };
   }
 
+  if (parts[0] === 'my-claims') {
+    return { name: 'unified-app', tab: 'my-claims' };
+  }
+
+  if (parts[0] === 'recording') {
+    return { name: 'unified-app', tab: 'recording' };
+  }
+
+  if (parts[0] === 'supporting') {
+    return { name: 'unified-app', tab: 'supporting' };
+  }
+
   if (parts[0] === 'claims' && parts[1] && parts[2] === 'live') {
     return { name: 'claim-live', slug: parts[1] };
   }
@@ -1653,6 +1721,9 @@ function AppChrome({ children, immersive = false }: { children: ReactNode; immer
             <a href="/">Home</a>
             <a href="/discover">Discover</a>
             {isCreatePage ? null : <a href="/claims/new">New claim</a>}
+            <a href="/my-claims">My claims</a>
+            <a href="/recording">Recording</a>
+            <a href="/supporting">Supporting</a>
             <a href="/activity">Activity</a>
             <a href="/profile">Profile</a>
             <a href="/#examples">Landing examples</a>
@@ -1679,7 +1750,7 @@ function AppChrome({ children, immersive = false }: { children: ReactNode; immer
   );
 }
 
-function getActiveAppNavigationKey(pathname: string): UnifiedAppTabKey | 'create' {
+function getActiveAppNavigationKey(pathname: string): AppNavigationKey {
   if (pathname.startsWith('/discover')) return 'discover';
   if (pathname.startsWith('/activity')) return 'activity';
   if (pathname.startsWith('/profile')) return 'profile';
@@ -1687,7 +1758,7 @@ function getActiveAppNavigationKey(pathname: string): UnifiedAppTabKey | 'create
   return 'home';
 }
 
-function getAppNavigationIcon(key: UnifiedAppTabKey | 'create') {
+function getAppNavigationIcon(key: AppNavigationKey) {
   if (key === 'discover') return 'D';
   if (key === 'create') return '+';
   if (key === 'activity') return 'A';
