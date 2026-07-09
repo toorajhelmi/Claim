@@ -231,6 +231,7 @@ type ClaimBundle = {
 };
 
 type ClaimDetailTabKey = 'overview' | 'backing' | 'proof' | 'live';
+type UnifiedAppTabKey = 'home' | 'discover' | 'activity' | 'profile';
 type LiveViewerRole = 'claimer' | 'recorder' | 'supporter';
 type LiveRoomMode = 'test' | 'official';
 
@@ -281,6 +282,14 @@ const claimDetailTabs: Array<{ key: ClaimDetailTabKey; label: string }> = [
   { key: 'backing', label: 'Backing' },
   { key: 'proof', label: 'Proof' },
   { key: 'live', label: 'Live' },
+];
+
+const appNavigationTabs: Array<{ key: UnifiedAppTabKey | 'create'; label: string; href: string }> = [
+  { key: 'home', label: 'Home', href: '/' },
+  { key: 'discover', label: 'Discover', href: '/discover' },
+  { key: 'create', label: 'Create', href: '/claims/new' },
+  { key: 'activity', label: 'Activity', href: '/activity' },
+  { key: 'profile', label: 'Profile', href: '/profile' },
 ];
 
 type ClaimabilityCriterion = {
@@ -446,44 +455,139 @@ export function App() {
     return <RecorderInvitePage token={route.token} />;
   }
 
-  return <HomePage />;
+  if (route.name === 'unified-app') {
+    return <UnifiedAppPage activeTab={route.tab} />;
+  }
+
+  return <UnifiedAppPage activeTab="home" />;
 }
 
-function HomePage() {
+type HomePledge = {
+  id: string;
+  claim_id: string;
+  amount_cents: number;
+  created_at: string;
+};
+
+type HomeClaimCard = {
+  claim: Claim;
+  relationships: string[];
+  eyebrow: string;
+  detail: string;
+  ctaLabel: string;
+  href: string;
+};
+
+type HomeActionCard = {
+  id: string;
+  title: string;
+  label: string;
+  detail: string;
+  href: string;
+  ctaLabel: string;
+};
+
+type HomeActivityCard = {
+  id: string;
+  title: string;
+  label: string;
+  detail: string;
+  href: string;
+};
+
+type UnifiedHomeData = {
+  userId: string;
+  userEmail: string;
+  displayName: string;
+  myClaims: Claim[];
+  discoverClaims: Claim[];
+  supportedClaims: Claim[];
+  recorderInvites: RecorderInvite[];
+  recorderClaims: Claim[];
+  pledgesByClaimId: Map<string, HomePledge>;
+};
+
+const liveClaimStatuses: ClaimStatus[] = ['live'];
+const upcomingClaimStatuses: ClaimStatus[] = ['preview', 'open_for_backing', 'threshold_met', 'scheduled'];
+const finalOrReviewClaimStatuses: ClaimStatus[] = ['under_review', 'verified', 'not_proven', 'cancelled', 'disputed'];
+const discoverClaimStatuses: ClaimStatus[] = ['preview', 'open_for_backing', 'threshold_met', 'scheduled', 'live'];
+
+function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
   const [loading, setLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [myClaims, setMyClaims] = useState<Claim[]>([]);
-  const [supportClaims, setSupportClaims] = useState<Claim[]>([]);
+  const [homeData, setHomeData] = useState<UnifiedHomeData | null>(null);
 
   useEffect(() => {
     async function loadHome() {
       const { data: userData } = await supabase.auth.getUser();
-      const currentUserId = userData.user?.id ?? null;
-      setUserId(currentUserId);
+      const currentUser = userData.user;
 
-      if (!currentUserId) {
+      if (!currentUser) {
         setLoading(false);
         return;
       }
 
-      const [mine, supportable] = await Promise.all([
+      const userEmail = String(currentUser.email ?? '').trim().toLowerCase();
+      const [profile, mine, discoverable, pledges, recorderInvites] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('display_name, contact_email')
+          .eq('id', currentUser.id)
+          .maybeSingle(),
         supabase
           .from('claims')
           .select('*')
-          .eq('creator_id', currentUserId)
+          .eq('creator_id', currentUser.id)
           .order('created_at', { ascending: false })
-          .limit(8),
+          .limit(12),
         supabase
           .from('claims')
           .select('*')
-          .neq('creator_id', currentUserId)
-          .in('status', ['preview', 'open_for_backing', 'threshold_met', 'scheduled', 'live'])
+          .neq('creator_id', currentUser.id)
+          .in('status', discoverClaimStatuses)
           .order('created_at', { ascending: false })
-          .limit(8),
+          .limit(14),
+        userEmail
+          ? supabase
+            .from('claim_pledges')
+            .select('id, claim_id, amount_cents, created_at')
+            .ilike('supporter_email', userEmail)
+            .order('created_at', { ascending: false })
+            .limit(40)
+          : Promise.resolve({ data: [] }),
+        userEmail
+          ? supabase
+            .from('claim_recorder_invites')
+            .select('*')
+            .ilike('invitee_contact', userEmail)
+            .order('created_at', { ascending: false })
+            .limit(40)
+          : Promise.resolve({ data: [] }),
       ]);
 
-      setMyClaims((mine.data ?? []) as Claim[]);
-      setSupportClaims((supportable.data ?? []) as Claim[]);
+      const pledgedRows = (pledges.data ?? []) as HomePledge[];
+      const recorderRows = (recorderInvites.data ?? []) as RecorderInvite[];
+      const [supportedClaims, recorderClaims] = await Promise.all([
+        fetchClaimsByIds(pledgedRows.map((pledge) => pledge.claim_id)),
+        fetchClaimsByIds(recorderRows.map((invite) => invite.claim_id)),
+      ]);
+      const metadata = currentUser.user_metadata;
+      const profileData = profile.data as { display_name?: string | null; contact_email?: string | null } | null;
+
+      setHomeData({
+        userId: currentUser.id,
+        userEmail,
+        displayName:
+          profileData?.display_name
+          || String(metadata.display_name ?? '')
+          || userEmail.split('@')[0]
+          || 'Claimer',
+        myClaims: (mine.data ?? []) as Claim[],
+        discoverClaims: (discoverable.data ?? []) as Claim[],
+        supportedClaims,
+        recorderInvites: recorderRows,
+        recorderClaims,
+        pledgesByClaimId: new Map(pledgedRows.map((pledge) => [pledge.claim_id, pledge])),
+      });
       setLoading(false);
     }
 
@@ -494,83 +598,476 @@ function HomePage() {
     return <LoadingPage label="Loading Klaimd home..." />;
   }
 
-  if (!userId) {
+  if (!homeData) {
     return <LandingPage />;
   }
+
+  const ownedCards = homeData.myClaims.map((claim) => createHomeClaimCard({
+    claim,
+    relationships: ['Your claim'],
+    pledge: homeData.pledgesByClaimId.get(claim.id),
+  }));
+  const recorderCards = homeData.recorderClaims.map((claim) => createHomeClaimCard({
+    claim,
+    relationships: ['Recording'],
+    recorderInvite: homeData.recorderInvites.find((invite) => invite.claim_id === claim.id),
+  }));
+  const supportedCards = homeData.supportedClaims.map((claim) => createHomeClaimCard({
+    claim,
+    relationships: ['Supported'],
+    pledge: homeData.pledgesByClaimId.get(claim.id),
+  }));
+  const discoverCards = homeData.discoverClaims.map((claim) => createHomeClaimCard({
+    claim,
+    relationships: ['Discover'],
+  }));
+  const liveNowCards = uniqueHomeClaimCards([
+    ...ownedCards.filter((card) => liveClaimStatuses.includes(card.claim.status)),
+    ...recorderCards.filter((card) => liveClaimStatuses.includes(card.claim.status)),
+    ...supportedCards.filter((card) => liveClaimStatuses.includes(card.claim.status)),
+  ]);
+  const upcomingSupportedCards = supportedCards.filter((card) => upcomingClaimStatuses.includes(card.claim.status));
+  const recordingAssignmentCards = recorderCards.filter((card) => !finalOrReviewClaimStatuses.includes(card.claim.status));
+  const pastActivityCards = uniqueHomeClaimCards([
+    ...ownedCards.filter((card) => finalOrReviewClaimStatuses.includes(card.claim.status)),
+    ...recorderCards.filter((card) => finalOrReviewClaimStatuses.includes(card.claim.status)),
+    ...supportedCards.filter((card) => finalOrReviewClaimStatuses.includes(card.claim.status)),
+  ]);
+  const actionCards = createHomeActionCards(homeData, ownedCards, recorderCards, supportedCards);
+  const activityCards = createActivityCards(homeData, ownedCards, recorderCards, supportedCards);
+  const totalActiveCount = liveNowCards.length + actionCards.length;
 
   return (
     <AppChrome>
       <main className="app-page section-shell">
-        <section className="dashboard-hero">
+        <section className="dashboard-hero unified-dashboard-hero">
           <div>
             <p className="eyebrow">Klaimd home</p>
-            <h1 className="page-title">Your goal room.</h1>
+            <h1 className="page-title">Your action hub.</h1>
             <p className="page-lede">
-              Continue drafting your claims, activate proof setup, or back claims that are already open.
+              One account for creating, recording, supporting, and proving claims. The most urgent next actions stay on top.
             </p>
           </div>
-          <a className="button button-primary" href="/claims/new">
-            New claim
-          </a>
+          <div className="home-hero-actions">
+            <span>{totalActiveCount} active action{totalActiveCount === 1 ? '' : 's'}</span>
+            <a className="button button-primary" href="/claims/new">Create claim</a>
+          </div>
         </section>
 
-        <div className="mvp-layout">
-          <section className="mvp-panel">
-            <div className="panel-heading-row">
-              <div>
-                <p className="eyebrow">My claims</p>
-                <h2>Drafts and active claims</h2>
-              </div>
-            </div>
-            <ClaimCardList
-              claims={myClaims}
-              emptyText="No claims yet. Start with a draft and activate it when proof setup is ready."
-              ownerView
-            />
-          </section>
+        {activeTab === 'home' ? (
+          <UnifiedHomeView
+            actionCards={actionCards}
+            discoverCards={discoverCards.slice(0, 4)}
+            liveNowCards={liveNowCards}
+            myClaimCards={ownedCards}
+            pastActivityCards={pastActivityCards}
+            recordingAssignmentCards={recordingAssignmentCards}
+            upcomingSupportedCards={upcomingSupportedCards}
+          />
+        ) : null}
 
-          <aside className="mvp-panel">
-            <p className="eyebrow">Support</p>
-            <h2>Claims you can back</h2>
-            <ClaimCardList
-              claims={supportClaims}
-              emptyText="No public claims are open for backing yet."
-            />
-          </aside>
-        </div>
+        {activeTab === 'discover' ? <DiscoverView claimCards={discoverCards} /> : null}
+        {activeTab === 'activity' ? <ActivityView activityCards={activityCards} /> : null}
+        {activeTab === 'profile' ? <ProfileView data={homeData} /> : null}
       </main>
     </AppChrome>
   );
 }
 
-function ClaimCardList({
-  claims,
-  emptyText,
-  ownerView = false,
+function UnifiedHomeView({
+  actionCards,
+  discoverCards,
+  liveNowCards,
+  myClaimCards,
+  pastActivityCards,
+  recordingAssignmentCards,
+  upcomingSupportedCards,
 }: {
-  claims: Claim[];
-  emptyText: string;
-  ownerView?: boolean;
+  actionCards: HomeActionCard[];
+  discoverCards: HomeClaimCard[];
+  liveNowCards: HomeClaimCard[];
+  myClaimCards: HomeClaimCard[];
+  pastActivityCards: HomeClaimCard[];
+  recordingAssignmentCards: HomeClaimCard[];
+  upcomingSupportedCards: HomeClaimCard[];
 }) {
-  if (claims.length === 0) {
-    return <p className="form-message">{emptyText}</p>;
+  const hasPersonalActivity =
+    liveNowCards.length > 0 ||
+    actionCards.length > 0 ||
+    myClaimCards.length > 0 ||
+    recordingAssignmentCards.length > 0 ||
+    upcomingSupportedCards.length > 0 ||
+    pastActivityCards.length > 0;
+
+  return (
+    <div className="unified-home-grid">
+      {liveNowCards.length > 0 ? (
+        <HomeRail eyebrow="Live now" title="Jump back into live proof." cards={liveNowCards} featured />
+      ) : null}
+
+      {actionCards.length > 0 ? <ActionRail actions={actionCards} /> : null}
+
+      {myClaimCards.length > 0 ? (
+        <HomeRail eyebrow="My claims" title="Your claim rooms." cards={myClaimCards} />
+      ) : null}
+
+      {recordingAssignmentCards.length > 0 ? (
+        <HomeRail eyebrow="Recording" title="Proof roles assigned to you." cards={recordingAssignmentCards} />
+      ) : null}
+
+      {upcomingSupportedCards.length > 0 ? (
+        <HomeRail eyebrow="Upcoming supported" title="Claims you are backing." cards={upcomingSupportedCards} />
+      ) : null}
+
+      {pastActivityCards.length > 0 ? (
+        <HomeRail eyebrow="Past activity" title="Outcomes and review." cards={pastActivityCards} />
+      ) : null}
+
+      <HomeRail
+        eyebrow="Discover more"
+        title={hasPersonalActivity ? 'Other claims to support.' : 'Start by creating or supporting a claim.'}
+        cards={discoverCards}
+        emptyText="No public claims are ready to discover yet."
+      />
+    </div>
+  );
+}
+
+function DiscoverView({ claimCards }: { claimCards: HomeClaimCard[] }) {
+  return (
+    <div className="unified-home-grid">
+      <section className="mvp-panel unified-section-panel">
+        <div className="panel-heading-row">
+          <div>
+            <p className="eyebrow">Discover</p>
+            <h2>Find claims to back or watch.</h2>
+          </div>
+          <a className="button button-ghost" href="/claims/new">Create instead</a>
+        </div>
+        <HomeClaimCardList cards={claimCards} emptyText="No public claims are ready to discover yet." />
+      </section>
+    </div>
+  );
+}
+
+function ActivityView({ activityCards }: { activityCards: HomeActivityCard[] }) {
+  return (
+    <section className="mvp-panel unified-section-panel">
+      <p className="eyebrow">Activity</p>
+      <h2>What changed across your claims.</h2>
+      <div className="home-activity-list">
+        {activityCards.length === 0 ? <p className="form-message">No claim activity yet.</p> : null}
+        {activityCards.map((activity) => (
+          <a className="home-action-card" href={activity.href} key={activity.id}>
+            <span>{activity.label}</span>
+            <strong>{activity.title}</strong>
+            <p>{activity.detail}</p>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ProfileView({ data }: { data: UnifiedHomeData }) {
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    window.location.href = '/';
   }
 
   return (
-    <div className="claim-card-list">
-      {claims.map((claim) => (
-        <a className="claim-card-row claim-statement-shell" href={getClaimDetailPath(claim)} key={claim.id}>
-          <span>{claim.status.replace(/_/g, ' ')}</span>
-          <strong className="claim-title-effect">{claim.title}</strong>
-          <small>
-            {ownerView && claim.status === 'draft'
-              ? 'Draft - review when ready'
-              : `${formatMoney(claim.pledge_pool_cents)} pledged · ${claim.supporter_count} supporters`}
-          </small>
+    <div className="mvp-layout profile-layout">
+      <section className="mvp-panel unified-section-panel">
+        <p className="eyebrow">Profile</p>
+        <h2>{data.displayName}</h2>
+        <p>{data.userEmail || 'No email on file'}</p>
+        <div className="profile-stat-grid">
+          <Metric label="My claims" value={String(data.myClaims.length)} />
+          <Metric label="Supported" value={String(data.supportedClaims.length)} />
+          <Metric label="Recording" value={String(data.recorderClaims.length)} />
+        </div>
+        <button className="button button-ghost" type="button" onClick={() => void handleSignOut()}>
+          Sign out
+        </button>
+      </section>
+      <aside className="mvp-panel unified-section-panel">
+        <p className="eyebrow">Account model</p>
+        <h2>One user, many roles.</h2>
+        <p>
+          Klaimd decides whether you are a claimer, recorder, or supporter per claim. Your Home and navigation stay the same.
+        </p>
+      </aside>
+    </div>
+  );
+}
+
+function HomeRail({
+  cards,
+  emptyText,
+  eyebrow,
+  featured = false,
+  title,
+}: {
+  cards: HomeClaimCard[];
+  emptyText?: string;
+  eyebrow: string;
+  featured?: boolean;
+  title: string;
+}) {
+  return (
+    <section className={`mvp-panel unified-section-panel ${featured ? 'featured' : ''}`}>
+      <div className="panel-heading-row">
+        <div>
+          <p className="eyebrow">{eyebrow}</p>
+          <h2>{title}</h2>
+        </div>
+      </div>
+      <HomeClaimCardList cards={cards} emptyText={emptyText} />
+    </section>
+  );
+}
+
+function ActionRail({ actions }: { actions: HomeActionCard[] }) {
+  return (
+    <section className="mvp-panel unified-section-panel action-panel">
+      <p className="eyebrow">Needs your action</p>
+      <h2>Do these next.</h2>
+      <div className="home-action-grid">
+        {actions.map((action) => (
+          <a className="home-action-card" href={action.href} key={action.id}>
+            <span>{action.label}</span>
+            <strong>{action.title}</strong>
+            <p>{action.detail}</p>
+            <small>{action.ctaLabel}</small>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function HomeClaimCardList({ cards, emptyText }: { cards: HomeClaimCard[]; emptyText?: string }) {
+  if (cards.length === 0) {
+    return emptyText ? <p className="form-message">{emptyText}</p> : null;
+  }
+
+  return (
+    <div className="claim-card-list unified-claim-card-list">
+      {cards.map((card) => (
+        <a className="claim-card-row unified-claim-card claim-statement-shell" href={card.href} key={`${card.claim.id}-${card.eyebrow}`}>
+          <div className="relationship-row">
+            {card.relationships.map((relationship) => (
+              <span key={relationship}>{relationship}</span>
+            ))}
+          </div>
+          <strong className="claim-title-effect">{card.claim.title}</strong>
+          <small>{card.detail}</small>
+          <em>{card.ctaLabel}</em>
         </a>
       ))}
     </div>
   );
+}
+
+async function fetchClaimsByIds(claimIds: string[]) {
+  const uniqueClaimIds = Array.from(new Set(claimIds.filter(Boolean)));
+
+  if (uniqueClaimIds.length === 0) {
+    return [];
+  }
+
+  const { data } = await supabase
+    .from('claims')
+    .select('*')
+    .in('id', uniqueClaimIds)
+    .order('created_at', { ascending: false });
+
+  return (data ?? []) as Claim[];
+}
+
+function createHomeClaimCard({
+  claim,
+  pledge,
+  recorderInvite,
+  relationships,
+}: {
+  claim: Claim;
+  pledge?: HomePledge;
+  recorderInvite?: RecorderInvite;
+  relationships: string[];
+}): HomeClaimCard {
+  const isLive = claim.status === 'live';
+  const isFinalOrReview = finalOrReviewClaimStatuses.includes(claim.status);
+  const isOwner = relationships.includes('Your claim');
+  const isRecorder = relationships.includes('Recording');
+  const statusLabel = claim.status.replace(/_/g, ' ');
+  const pledgeText = pledge ? `${formatMoney(pledge.amount_cents)} pledged by you` : `${formatMoney(claim.pledge_pool_cents)} pledged`;
+  const scheduleText = claim.live_starts_at ? `Live ${formatDateTime(claim.live_starts_at)}` : `Deadline ${formatDateTime(claim.deadline_at)}`;
+  const href = isLive
+    ? getClaimLivePath(claim)
+    : isFinalOrReview
+      ? getClaimResultPath(claim)
+      : isRecorder
+        ? getClaimLivePath(claim)
+        : getClaimDetailPath(claim);
+  const ctaLabel = isLive
+    ? isOwner
+      ? 'Open live room'
+      : isRecorder
+        ? 'Join as recorder'
+        : 'Watch live'
+    : isFinalOrReview
+      ? 'View outcome'
+      : isOwner && claim.status === 'draft'
+        ? 'Continue setup'
+        : isRecorder
+          ? recorderInvite?.status === 'pending'
+            ? 'Accept role'
+            : 'Open live room'
+          : relationships.includes('Discover')
+            ? 'View claim'
+            : 'View claim';
+
+  return {
+    claim,
+    relationships,
+    eyebrow: statusLabel,
+    detail: [
+      statusLabel,
+      pledgeText,
+      scheduleText,
+      recorderInvite ? `${recorderInvite.role} · ${recorderInvite.status}` : '',
+      `${claim.supporter_count} supporter${claim.supporter_count === 1 ? '' : 's'}`,
+    ].filter(Boolean).join(' · '),
+    ctaLabel,
+    href,
+  };
+}
+
+function createHomeActionCards(
+  homeData: UnifiedHomeData,
+  ownedCards: HomeClaimCard[],
+  recorderCards: HomeClaimCard[],
+  supportedCards: HomeClaimCard[],
+) {
+  const actions: HomeActionCard[] = [];
+
+  ownedCards.forEach((card) => {
+    if (card.claim.status === 'draft') {
+      actions.push({
+        id: `draft-${card.claim.id}`,
+        title: card.claim.title,
+        label: 'Activate draft',
+        detail: 'This claim is saved but not open for backing yet.',
+        href: `${getClaimDetailPath(card.claim)}?mode=activate`,
+        ctaLabel: 'Continue setup',
+      });
+    }
+
+    if (card.claim.status === 'live') {
+      actions.push({
+        id: `owner-live-${card.claim.id}`,
+        title: card.claim.title,
+        label: 'Official event live',
+        detail: 'Manage the live proof room or end the event when complete.',
+        href: getClaimLivePath(card.claim),
+        ctaLabel: 'Open live room',
+      });
+    }
+
+    if (card.claim.status === 'under_review') {
+      actions.push({
+        id: `owner-review-${card.claim.id}`,
+        title: card.claim.title,
+        label: 'In review',
+        detail: 'Review the evidence package or reopen the official event if needed.',
+        href: getClaimResultPath(card.claim),
+        ctaLabel: 'View review',
+      });
+    }
+  });
+
+  recorderCards.forEach((card) => {
+    const invite = homeData.recorderInvites.find((recorderInvite) => recorderInvite.claim_id === card.claim.id);
+
+    if (invite?.status === 'pending') {
+      actions.push({
+        id: `recorder-pending-${invite.id}`,
+        title: card.claim.title,
+        label: 'Recorder invite',
+        detail: 'Accept or review your recording responsibilities.',
+        href: `/recorder/invite/${invite.invite_token}`,
+        ctaLabel: 'Accept recorder role',
+      });
+    }
+
+    if (invite?.status === 'accepted' && card.claim.status === 'live') {
+      actions.push({
+        id: `recorder-live-${invite.id}`,
+        title: card.claim.title,
+        label: 'Recording live',
+        detail: 'Join the official live room and help capture proof.',
+        href: getClaimLivePath(card.claim),
+        ctaLabel: 'Join as recorder',
+      });
+    }
+  });
+
+  supportedCards.forEach((card) => {
+    if (card.claim.status === 'live') {
+      actions.push({
+        id: `support-live-${card.claim.id}`,
+        title: card.claim.title,
+        label: 'Supported claim live',
+        detail: 'A claim you backed is live now.',
+        href: getClaimLivePath(card.claim),
+        ctaLabel: 'Watch live',
+      });
+    }
+  });
+
+  return actions.slice(0, 8);
+}
+
+function createActivityCards(
+  homeData: UnifiedHomeData,
+  ownedCards: HomeClaimCard[],
+  recorderCards: HomeClaimCard[],
+  supportedCards: HomeClaimCard[],
+) {
+  return uniqueHomeClaimCards([...ownedCards, ...recorderCards, ...supportedCards])
+    .map<HomeActivityCard>((card) => {
+      const relationship = card.relationships[0] ?? 'Claim';
+      const pledge = homeData.pledgesByClaimId.get(card.claim.id);
+      const detail = pledge
+        ? `${relationship} · ${formatMoney(pledge.amount_cents)} pledged · ${card.claim.status.replace(/_/g, ' ')}`
+        : `${relationship} · ${card.claim.status.replace(/_/g, ' ')} · ${formatMoney(card.claim.pledge_pool_cents)} pledged`;
+
+      return {
+        id: `${relationship}-${card.claim.id}`,
+        title: card.claim.title,
+        label: relationship,
+        detail,
+        href: card.href,
+      };
+    })
+    .slice(0, 20);
+}
+
+function uniqueHomeClaimCards(cards: HomeClaimCard[]) {
+  const seenClaimIds = new Set<string>();
+  const uniqueCards: HomeClaimCard[] = [];
+
+  cards.forEach((card) => {
+    if (seenClaimIds.has(card.claim.id)) {
+      return;
+    }
+
+    seenClaimIds.add(card.claim.id);
+    uniqueCards.push(card);
+  });
+
+  return uniqueCards;
 }
 
 function LandingPage() {
@@ -899,6 +1396,7 @@ function getRoute(pathname: string):
   | { name: 'auth'; nextPath: string }
   | { name: 'auth-callback'; nextPath: string }
   | { name: 'new-claim' }
+  | { name: 'unified-app'; tab: UnifiedAppTabKey }
   | { name: 'claim-detail'; slug: string }
   | { name: 'claim-live'; slug: string }
   | { name: 'claim-result'; slug: string }
@@ -916,6 +1414,18 @@ function getRoute(pathname: string):
 
   if (parts[0] === 'claims' && parts[1] === 'new') {
     return { name: 'new-claim' };
+  }
+
+  if (parts[0] === 'discover') {
+    return { name: 'unified-app', tab: 'discover' };
+  }
+
+  if (parts[0] === 'activity') {
+    return { name: 'unified-app', tab: 'activity' };
+  }
+
+  if (parts[0] === 'profile') {
+    return { name: 'unified-app', tab: 'profile' };
   }
 
   if (parts[0] === 'claims' && parts[1] && parts[2] === 'live') {
@@ -939,6 +1449,9 @@ function getRoute(pathname: string):
 
 function AppChrome({ children, immersive = false }: { children: ReactNode; immersive?: boolean }) {
   const isCreatePage = window.location.pathname === '/claims/new';
+  const currentPath = window.location.pathname;
+  const activeNavigationKey = getActiveAppNavigationKey(currentPath);
+  const showAppTabBar = !immersive && !currentPath.startsWith('/auth');
 
   return (
     <div className={immersive ? 'app-chrome app-chrome-immersive' : 'app-chrome app-chrome-product'}>
@@ -954,15 +1467,48 @@ function AppChrome({ children, immersive = false }: { children: ReactNode; immer
           </summary>
           <nav aria-label="App navigation">
             <a href="/">Home</a>
+            <a href="/discover">Discover</a>
             {isCreatePage ? null : <a href="/claims/new">New claim</a>}
-            <a href="/claims/cross-city-by-sunset">Demo claim</a>
-            <a href="/#examples">Landing</a>
+            <a href="/activity">Activity</a>
+            <a href="/profile">Profile</a>
+            <a href="/#examples">Landing examples</a>
           </nav>
         </details>
       )}
       {children}
+      {showAppTabBar ? (
+        <nav className="app-tab-bar" aria-label="Primary app navigation">
+          {appNavigationTabs.map((tab) => (
+            <a
+              className={activeNavigationKey === tab.key ? 'selected' : ''}
+              href={tab.href}
+              aria-current={activeNavigationKey === tab.key ? 'page' : undefined}
+              key={tab.key}
+            >
+              <span aria-hidden="true">{getAppNavigationIcon(tab.key)}</span>
+              {tab.label}
+            </a>
+          ))}
+        </nav>
+      ) : null}
     </div>
   );
+}
+
+function getActiveAppNavigationKey(pathname: string): UnifiedAppTabKey | 'create' {
+  if (pathname.startsWith('/discover')) return 'discover';
+  if (pathname.startsWith('/activity')) return 'activity';
+  if (pathname.startsWith('/profile')) return 'profile';
+  if (pathname.startsWith('/claims/new')) return 'create';
+  return 'home';
+}
+
+function getAppNavigationIcon(key: UnifiedAppTabKey | 'create') {
+  if (key === 'discover') return 'D';
+  if (key === 'create') return '+';
+  if (key === 'activity') return 'A';
+  if (key === 'profile') return 'P';
+  return 'H';
 }
 
 function AuthPage({ nextPath }: { nextPath: string }) {
