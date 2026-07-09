@@ -653,22 +653,23 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
     ...liveNowCards.map((card) => card.claim.id),
     ...actionCards.map((action) => action.claimId),
   ]).size;
+  const pageHeader = getUnifiedAppPageHeader(activeTab);
 
   return (
     <AppChrome>
       <main className="app-page section-shell">
         <section className="dashboard-hero unified-dashboard-hero">
           <div>
-            <p className="eyebrow">Klaimd home</p>
-            <h1 className="page-title">Home.</h1>
-            <p className="page-lede">
-              Pick a tab. See only the claims that matter for that context.
-            </p>
+            <p className="eyebrow">{pageHeader.eyebrow}</p>
+            <h1 className="page-title">{pageHeader.title}</h1>
+            <p className="page-lede">{pageHeader.lede}</p>
           </div>
-          <div className="home-hero-actions">
-            <span>{totalActiveCount} active action{totalActiveCount === 1 ? '' : 's'}</span>
-            <a className="button button-primary" href="/claims/new">Create claim</a>
-          </div>
+          {activeTab === 'home' ? (
+            <div className="home-hero-actions">
+              <span>{totalActiveCount} active action{totalActiveCount === 1 ? '' : 's'}</span>
+              <a className="button button-primary" href="/claims/new">Create claim</a>
+            </div>
+          ) : null}
         </section>
 
         {activeTab === 'home' ? (
@@ -882,6 +883,38 @@ function ProfileView({ data }: { data: UnifiedHomeData }) {
       </aside>
     </div>
   );
+}
+
+function getUnifiedAppPageHeader(activeTab: UnifiedAppTabKey) {
+  if (activeTab === 'discover') {
+    return {
+      eyebrow: 'Discover',
+      title: 'Find claims.',
+      lede: 'Browse public claims you do not already own, record, or support.',
+    };
+  }
+
+  if (activeTab === 'activity') {
+    return {
+      eyebrow: 'Activity',
+      title: 'Recent status.',
+      lede: 'A compact feed of claim states across your claims, recording roles, and pledges.',
+    };
+  }
+
+  if (activeTab === 'profile') {
+    return {
+      eyebrow: 'Profile',
+      title: 'Account.',
+      lede: 'Your Klaimd identity, role counts, quick links, and sign out.',
+    };
+  }
+
+  return {
+    eyebrow: 'Klaimd home',
+    title: 'Home.',
+    lede: 'Your next claim actions first. Use the sections below when you need a specific context.',
+  };
 }
 
 function HomeRail({
