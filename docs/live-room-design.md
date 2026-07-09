@@ -4,7 +4,7 @@ This document is the implementation reference for the Klaimd live room. It expan
 
 The live room is not just a video call. It is the proof environment where the claimer, approved recorders, supporters, evidence, chat, and final review package come together.
 
-For the broader supporter home, invitation, live viewer, and outcome flows, see `docs/supporter-experience-design.md`.
+For the broader unified logged-in home/navigation model, see `docs/unified-home-navigation-design.md`. For supporter-specific rails, invitations, live viewer, and outcome flows, see `docs/supporter-experience-design.md`.
 
 ## Goals
 

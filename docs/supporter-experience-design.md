@@ -2,6 +2,8 @@
 
 This document defines the supporter-side experience for Klaimd: the home page, claim discovery, invitations, live participation, and post-event outcomes.
 
+For the recommended unified logged-in navigation across claimers, recorders, and supporters, see `docs/unified-home-navigation-design.md`. The supporter sections below should be treated as rails inside that unified home, not as a separate supporter-only app mode.
+
 ## Goals
 
 - Help supporters quickly rejoin live events they have backed.
