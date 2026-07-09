@@ -3212,9 +3212,7 @@ function ClaimLivePage({ slug }: { slug: string }) {
               {!liveStageActive && !isOfficialLive ? <p className="eyebrow">Room preview</p> : null}
               <LiveRoomSession
                 claim={data.claim}
-                canEndOfficialEvent={canManageOfficialEvent && data.claim.status === 'live'}
                 mode={liveRoomMode}
-                onEndOfficialEvent={() => runOfficialEventAction('end')}
                 onConnectionChange={setLiveStageActive}
                 viewerRole={viewerRole}
               />
@@ -3248,7 +3246,13 @@ function ClaimLivePage({ slug }: { slug: string }) {
             canManage={canManageOfficialEvent}
             claim={data.claim}
             message={liveLifecycleMessage}
-            onEnd={() => runOfficialEventAction('end')}
+            onEnd={async () => {
+              const confirmed = window.confirm('End this official event and move the claim to review? You can reopen it later if needed.');
+
+              if (confirmed) {
+                await runOfficialEventAction('end');
+              }
+            }}
             onReopen={() => runOfficialEventAction('reopen')}
             onStart={() => runOfficialEventAction('start')}
             status={liveLifecycleStatus}
@@ -3451,17 +3455,13 @@ function ClaimStatementPreview({
 
 // Test runs and official live events share this session component; use `mode` to change behavior.
 function LiveRoomSession({
-  canEndOfficialEvent = false,
   claim,
   mode = 'test',
-  onEndOfficialEvent,
   onConnectionChange,
   viewerRole,
 }: {
-  canEndOfficialEvent?: boolean;
   claim: Claim;
   mode?: LiveRoomMode;
-  onEndOfficialEvent?: () => Promise<void>;
   onConnectionChange?: (connected: boolean) => void;
   viewerRole: LiveViewerRole;
 }) {
@@ -3729,18 +3729,6 @@ function LiveRoomSession({
     setRoomMessage(`${sessionLabel.charAt(0).toUpperCase()}${sessionLabel.slice(1)} closed on this device.`);
   }
 
-  async function endOfficialEventFromSession() {
-    if (!onEndOfficialEvent) return;
-
-    try {
-      setRoomMessage('Ending official event...');
-      await onEndOfficialEvent();
-      leaveLiveRoomSession();
-    } catch (endError) {
-      setRoomMessage(endError instanceof Error ? endError.message : 'Could not end the official event.');
-    }
-  }
-
   const isConnected = connectionState === 'connected';
   const isConnecting = connectionState === 'connecting';
 
@@ -3796,9 +3784,6 @@ function LiveRoomSession({
               onClick={() => setChatOpen((current) => !current)}
               type="chat"
             />
-            {canEndOfficialEvent ? (
-              <IconButton label="End official event" onClick={endOfficialEventFromSession} tone="danger" type="end" />
-            ) : null}
             <IconButton label={`Leave ${sessionLabel}`} onClick={leaveLiveRoomSession} tone="danger" type="leave" />
           </div>
           {chatOpen ? (
@@ -3817,7 +3802,7 @@ function LiveRoomSession({
           <h2>{canStream ? 'Your event is live.' : 'Live proof is on.'}</h2>
           <p>
             {canStream
-              ? 'Open the room to stream, monitor recorders, use chat, or end the official event.'
+              ? 'Open the room to stream, monitor recorders, or use chat. Leave the room when you are ready to end the event from this page.'
               : 'Open the room to watch the live proof and follow chat updates.'}
           </p>
         </div>
@@ -3998,7 +3983,7 @@ function IconButton({
   label: string;
   onClick: () => void;
   tone?: 'danger';
-  type: 'camera' | 'chat' | 'end' | 'leave' | 'mic' | 'preview';
+  type: 'camera' | 'chat' | 'leave' | 'mic' | 'preview';
 }) {
   return (
     <button
@@ -4013,7 +3998,7 @@ function IconButton({
   );
 }
 
-function IconGlyph({ type }: { type: 'camera' | 'chat' | 'end' | 'leave' | 'mic' | 'preview' }) {
+function IconGlyph({ type }: { type: 'camera' | 'chat' | 'leave' | 'mic' | 'preview' }) {
   if (type === 'camera') {
     return (
       <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -4037,14 +4022,6 @@ function IconGlyph({ type }: { type: 'camera' | 'chat' | 'end' | 'leave' | 'mic'
         <path d="M8.5 5.5h-2A1.5 1.5 0 0 0 5 7v10a1.5 1.5 0 0 0 1.5 1.5h2" />
         <path d="M13 8l4 4-4 4" />
         <path d="M17 12H8.5" />
-      </svg>
-    );
-  }
-
-  if (type === 'end') {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 24 24">
-        <rect x="7" y="7" width="10" height="10" rx="1.8" />
       </svg>
     );
   }
