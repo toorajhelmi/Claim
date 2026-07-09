@@ -230,6 +230,7 @@ type ClaimBundle = {
   checkins: Checkin[];
 };
 
+type ClaimDetailTabKey = 'overview' | 'backing' | 'proof' | 'live';
 type LiveViewerRole = 'claimer' | 'recorder' | 'supporter';
 type LiveRoomMode = 'test' | 'official';
 
@@ -266,6 +267,13 @@ const livePromptOptions = [
   'Confirm checkpoint',
   'Move closer',
   'Show surroundings',
+];
+
+const claimDetailTabs: Array<{ key: ClaimDetailTabKey; label: string }> = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'backing', label: 'Backing' },
+  { key: 'proof', label: 'Proof' },
+  { key: 'live', label: 'Live' },
 ];
 
 type ClaimabilityCriterion = {
@@ -544,7 +552,7 @@ function ClaimCardList({
   return (
     <div className="claim-card-list">
       {claims.map((claim) => (
-        <a className="claim-card-row claim-statement-shell" href={`/claims/${claim.slug}`} key={claim.id}>
+        <a className="claim-card-row claim-statement-shell" href={getClaimDetailPath(claim)} key={claim.id}>
           <span>{claim.status.replace(/_/g, ' ')}</span>
           <strong className="claim-title-effect">{claim.title}</strong>
           <small>
@@ -1715,7 +1723,7 @@ function CreateClaimPage() {
     }
 
     setStatus('success');
-    window.location.href = redirectToHome ? '/' : `/claims/${claim.slug}`;
+    window.location.href = redirectToHome ? '/' : getClaimDetailPath(claim as Pick<Claim, 'slug'>);
   }
 
   if (authLoading) {
@@ -2138,6 +2146,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [pledgeMessage, setPledgeMessage] = useState('');
   const [setupMessage, setSetupMessage] = useState('');
+  const [activeTab, setActiveTab] = useState<ClaimDetailTabKey>(() => getClaimDetailTabFromSearch());
   const [draftMode, setDraftMode] = useState<'review' | 'activate' | 'edit'>(() => {
     const mode = new URLSearchParams(window.location.search).get('mode');
     return mode === 'activate' || mode === 'edit' ? mode : 'review';
@@ -2173,6 +2182,14 @@ function ClaimDetailPage({ slug }: { slug: string }) {
   }, [data?.claim.id, data?.claim.status]);
 
   useEffect(() => {
+    if (!data?.claim) {
+      return;
+    }
+
+    replaceBrowserPath(getClaimDetailPath(data.claim, window.location.search));
+  }, [data?.claim.id, data?.claim.slug]);
+
+  useEffect(() => {
     async function verifyCheckoutReturn() {
       if (!data?.claim) return;
 
@@ -2184,7 +2201,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
         setDraftMode('activate');
         setActivationStep('payment');
         setSetupMessage('Payment was not completed. Try again when you are ready.');
-        window.history.replaceState(null, '', `/claims/${slug}?mode=activate`);
+        window.history.replaceState(null, '', getClaimDetailPath(data.claim, '?mode=activate'));
         return;
       }
 
@@ -2212,13 +2229,13 @@ function ClaimDetailPage({ slug }: { slug: string }) {
 
       if (!response.ok || !body?.ok) {
         setSetupMessage(body?.error ?? 'Payment could not be verified. Please retry activation.');
-        window.history.replaceState(null, '', `/claims/${slug}?mode=activate`);
+        window.history.replaceState(null, '', getClaimDetailPath(data.claim, '?mode=activate'));
         return;
       }
 
       setSetupMessage('Payment confirmed. Claim activated and recorder emails sent.');
       clearStoredActivationSetup(data.claim.id);
-      window.history.replaceState(null, '', `/claims/${slug}`);
+      window.history.replaceState(null, '', getClaimDetailPath(data.claim));
       await reload();
     }
 
@@ -2288,8 +2305,30 @@ function ClaimDetailPage({ slug }: { slug: string }) {
   function setDraftReviewMode(nextMode: 'review' | 'activate' | 'edit') {
     setDraftMode(nextMode);
     setSetupMessage('');
-    const nextUrl = nextMode === 'review' ? `/claims/${slug}` : `/claims/${slug}?mode=${nextMode}`;
+    const nextUrl = data?.claim
+      ? getClaimDetailPath(data.claim, nextMode === 'review' ? '' : `?mode=${nextMode}`)
+      : nextMode === 'review'
+        ? `/claims/${slug}`
+        : `/claims/${slug}?mode=${nextMode}`;
     window.history.replaceState(null, '', nextUrl);
+  }
+
+  function setClaimDetailTab(nextTab: ClaimDetailTabKey) {
+    setActiveTab(nextTab);
+
+    if (!data?.claim) {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    params.delete('mode');
+    if (nextTab === 'overview') {
+      params.delete('tab');
+    } else {
+      params.set('tab', nextTab);
+    }
+    const query = params.toString();
+    window.history.replaceState(null, '', getClaimDetailPath(data.claim, query ? `?${query}` : ''));
   }
 
   async function handleUpdateDraft(event: FormEvent<HTMLFormElement>) {
@@ -2592,7 +2631,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
             ? `Development payment bypass complete. Claim activated and ${sent} recorder email${sent === 1 ? '' : 's'} sent.`
             : 'Development payment bypass complete. Claim activated. No pending recorder email was needed.',
       );
-      window.history.replaceState(null, '', `/claims/${slug}`);
+      window.history.replaceState(null, '', getClaimDetailPath(data.claim));
       await reload();
       return;
     }
@@ -2608,6 +2647,9 @@ function ClaimDetailPage({ slug }: { slug: string }) {
   const isDraft = data.claim.status === 'draft';
   const isOwner = currentUserId === data.claim.creator_id;
   const recorderSuggestion = inferRecorderSetup(data.claim, data.proofRules);
+  const claimDetailPath = getClaimDetailPath(data.claim);
+  const claimLivePath = getClaimLivePath(data.claim);
+  const claimResultPath = getClaimResultPath(data.claim);
 
   if (isDraft && isOwner && draftMode === 'activate') {
     const setup = activationSetup ?? readStoredActivationSetup(
@@ -3042,38 +3084,42 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     <AppChrome>
       <main className="app-page section-shell">
         <ClaimHeader claim={data.claim} />
-        <div className="mvp-layout">
-          <section className="mvp-panel">
-            <p className="eyebrow">Preview page</p>
-            <ClaimStatementPreview
-              label="Claim"
-              title={data.claim.title}
-              description={data.claim.description ?? undefined}
-            />
-            {isDraft ? (
-              <p className="form-message">
-                This is a private draft. Add recording access and activate it before sharing with supporters.
-              </p>
-            ) : (
-              <ShareBar claim={data.claim} />
-            )}
-            <ProofRules rules={data.proofRules} />
-          </section>
+        <ClaimDetailTabs activeTab={activeTab} onSelect={setClaimDetailTab} />
 
-          <aside className="mvp-panel pledge-panel">
-            {isDraft ? (
-              <>
-                <p className="eyebrow">Draft</p>
-                <Metric label="Status" value="Setup incomplete" />
-                <Metric label="Recorder status" value={data.recorderInvites.length > 0 ? 'Added' : 'Needed'} />
-                <Metric label="Payment setup" value="Deferred until lock" />
-                <p className="form-message">
-                  The claim is saved, but not public for backing yet. Add recording access, then activate it.
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="eyebrow">Pledge threshold</p>
+        {activeTab === 'overview' ? (
+          <section className="claim-tab-panel">
+            <div className="mvp-layout">
+              <section className="mvp-panel">
+                <p className="eyebrow">Claim page</p>
+                <ClaimStatementPreview
+                  label="Claim"
+                  title={data.claim.title}
+                  description={data.claim.description ?? undefined}
+                />
+                <ShareBar claim={data.claim} />
+              </section>
+
+              <aside className="mvp-panel">
+                <p className="eyebrow">Snapshot</p>
+                <Metric label="Status" value={data.claim.status.replace(/_/g, ' ')} />
+                <Metric label="Pledged" value={formatMoney(data.claim.pledge_pool_cents)} />
+                <Metric label="Goal" value={formatMoney(data.claim.pledge_threshold_cents)} />
+                <Metric label="Live start" value={formatDateTime(data.claim.live_starts_at)} />
+                <Metric label="Deadline" value={formatDateTime(data.claim.deadline_at)} />
+                <div className="action-grid compact-action-grid">
+                  <a className="button button-primary" href={claimLivePath}>Open live room</a>
+                  <a className="button button-ghost" href={claimResultPath}>View result</a>
+                </div>
+              </aside>
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === 'backing' ? (
+          <section className="claim-tab-panel">
+            <div className="mvp-layout">
+              <section className="mvp-panel pledge-panel">
+                <p className="eyebrow">Backing</p>
                 <Metric label="Pledged" value={formatMoney(data.claim.pledge_pool_cents)} />
                 <Metric label="Threshold" value={formatMoney(data.claim.pledge_threshold_cents)} />
                 <Metric label="Supporters" value={String(data.claim.supporter_count)} />
@@ -3081,7 +3127,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                 {isOwner ? (
                   <form className="compact-form invite-supporters-form" onSubmit={handleInviteSupporters}>
                     <p className="form-message">
-                      Invite supporters to pledge. Klaimd will email each person a link to this claim page with
+                      Invite supporters to pledge. Klaimd will email each person a short link to this claim page with
                       the share message and pledge context.
                     </p>
                     <label>
@@ -3104,19 +3150,48 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                   </form>
                 )}
                 {pledgeMessage ? <p className="form-message">{pledgeMessage}</p> : null}
-              </>
-            )}
-          </aside>
-        </div>
+              </section>
 
-        <section className="mvp-panel">
-          <p className="eyebrow">Next steps</p>
-          <div className="action-grid">
-            <a className="button button-primary" href={`/claims/${data.claim.slug}/live`}>Open live room</a>
-            <a className="button button-ghost" href={`/claims/${data.claim.slug}/result`}>View result page</a>
-          </div>
-          <SupporterWall pledges={data.pledges} />
-        </section>
+              <section className="mvp-panel">
+                <SupporterWall pledges={data.pledges} />
+              </section>
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === 'proof' ? (
+          <section className="claim-tab-panel">
+            <div className="mvp-layout">
+              <section className="mvp-panel">
+                <ProofRules rules={data.proofRules} />
+              </section>
+              <Timeline events={data.proofEvents} checkins={data.checkins} />
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === 'live' ? (
+          <section className="claim-tab-panel">
+            <div className="mvp-layout">
+              <section className="mvp-panel">
+                <p className="eyebrow">Live and outcome</p>
+                <h2>Watch, record, or review.</h2>
+                <p>
+                  Join the live room when the proof event opens. After the event, use the result page to review the
+                  outcome and evidence package.
+                </p>
+                <div className="action-grid compact-action-grid">
+                  <a className="button button-primary" href={claimLivePath}>Open live room</a>
+                  <a className="button button-ghost" href={claimResultPath}>View result page</a>
+                  <a className="button button-ghost" href={claimDetailPath}>Claim overview</a>
+                </div>
+              </section>
+              <section className="mvp-panel">
+                <InviteList invites={data.recorderInvites} />
+              </section>
+            </div>
+          </section>
+        ) : null}
       </main>
     </AppChrome>
   );
@@ -3157,6 +3232,14 @@ function ClaimLivePage({ slug }: { slug: string }) {
 
     void loadViewerRole();
   }, [data]);
+
+  useEffect(() => {
+    if (!data?.claim) {
+      return;
+    }
+
+    replaceBrowserPath(getClaimLivePath(data.claim));
+  }, [data?.claim.id, data?.claim.slug]);
 
   if (loading) return <LoadingPage label="Opening live room..." />;
   if (error || !data) return <ErrorPage message={error ?? 'Claim not found.'} />;
@@ -3304,6 +3387,15 @@ function ClaimLivePage({ slug }: { slug: string }) {
 
 function ClaimResultPage({ slug }: { slug: string }) {
   const { data, loading, error } = useClaimBundle(slug);
+
+  useEffect(() => {
+    if (!data?.claim) {
+      return;
+    }
+
+    replaceBrowserPath(getClaimResultPath(data.claim));
+  }, [data?.claim.id, data?.claim.slug]);
+
   if (loading) return <LoadingPage label="Loading result..." />;
   if (error || !data) return <ErrorPage message={error ?? 'Claim not found.'} />;
 
@@ -4244,7 +4336,7 @@ function IconGlyph({ type }: { type: 'camera' | 'chat' | 'leave' | 'mic' | 'prev
   );
 }
 
-function useClaimBundle(slug: string) {
+function useClaimBundle(claimRef: string) {
   const [data, setData] = useState<ClaimBundle | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -4252,9 +4344,9 @@ function useClaimBundle(slug: string) {
   async function load() {
     setLoading(true);
     setError(null);
-    const { data: claim, error: claimError } = await supabase.from('claims').select('*').eq('slug', slug).single();
+    const { claim, error: claimError } = await resolveClaimByRef(claimRef);
     if (claimError || !claim) {
-      setError(claimError?.message ?? 'Claim not found.');
+      setError(claimError ?? 'Claim not found.');
       setLoading(false);
       return;
     }
@@ -4280,7 +4372,7 @@ function useClaimBundle(slug: string) {
 
   useEffect(() => {
     void load();
-  }, [slug]);
+  }, [claimRef]);
 
   return { data, loading, error, reload: load };
 }
@@ -4313,9 +4405,33 @@ function ProofRules({ rules }: { rules: ProofRule[] }) {
   );
 }
 
+function ClaimDetailTabs({
+  activeTab,
+  onSelect,
+}: {
+  activeTab: ClaimDetailTabKey;
+  onSelect: (tab: ClaimDetailTabKey) => void;
+}) {
+  return (
+    <nav className="claim-tabs" aria-label="Claim sections">
+      {claimDetailTabs.map((tab) => (
+        <button
+          className={activeTab === tab.key ? 'selected' : ''}
+          type="button"
+          onClick={() => onSelect(tab.key)}
+          aria-current={activeTab === tab.key ? 'page' : undefined}
+          key={tab.key}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 function ShareBar({ claim }: { claim: Claim }) {
   const [shareStatus, setShareStatus] = useState('');
-  const url = `${window.location.origin}/claims/${claim.slug}`;
+  const url = `${window.location.origin}${getClaimDetailPath(claim)}`;
   const shareText = [
     `I am making a ${appConfig.name} claim: "${claim.title}"`,
     `Goal: ${formatMoney(claim.pledge_threshold_cents)} pledged before proof starts.`,
@@ -4490,15 +4606,108 @@ function ErrorPage({ message }: { message: string }) {
   );
 }
 
-function createSlug(input: string) {
-  const base = input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-  const prefix = base.slice(0, 48).replace(/(^-|-$)/g, '') || 'claim';
-  const suffix = Math.random().toString(36).slice(2, 8);
+function createSlug(_input: string) {
+  const suffix = Math.random().toString(36).replace(/[^a-z0-9]/g, '').slice(2, 10);
+  return `clm${suffix || Date.now().toString(36).slice(-8)}`;
+}
 
-  return `${prefix}-${suffix}`;
+function getClaimPublicCode(claim: Pick<Claim, 'slug'>) {
+  const slug = String(claim.slug ?? '').trim();
+  const parts = slug.split('-').filter(Boolean);
+  const lastPart = parts[parts.length - 1] ?? slug;
+
+  if (parts.length > 1 && /^(?=.*\d)[a-z0-9]{4,12}$/i.test(lastPart)) {
+    return lastPart.toLowerCase();
+  }
+
+  return slug.toLowerCase();
+}
+
+function getClaimDetailPath(claim: Pick<Claim, 'slug'>, query = '') {
+  return `/claims/${getClaimPublicCode(claim)}${query}`;
+}
+
+function getClaimLivePath(claim: Pick<Claim, 'slug'>) {
+  return `/claims/${getClaimPublicCode(claim)}/live`;
+}
+
+function getClaimResultPath(claim: Pick<Claim, 'slug'>) {
+  return `/claims/${getClaimPublicCode(claim)}/result`;
+}
+
+function getClaimDetailTabFromSearch() {
+  const tab = new URLSearchParams(window.location.search).get('tab');
+  return claimDetailTabs.some((item) => item.key === tab) ? (tab as ClaimDetailTabKey) : 'overview';
+}
+
+function replaceBrowserPath(nextPath: string) {
+  const currentPath = `${window.location.pathname}${window.location.search}`;
+
+  if (currentPath !== nextPath) {
+    window.history.replaceState(null, '', nextPath);
+  }
+}
+
+async function resolveClaimByRef(claimRef: string): Promise<{ claim: Claim | null; error: string | null }> {
+  const normalizedRef = decodeURIComponent(claimRef).trim().toLowerCase();
+
+  if (!normalizedRef) {
+    return { claim: null, error: 'Claim not found.' };
+  }
+
+  const { data: exactClaim, error: exactError } = await supabase
+    .from('claims')
+    .select('*')
+    .eq('slug', normalizedRef)
+    .maybeSingle();
+
+  if (exactClaim) {
+    return { claim: exactClaim as Claim, error: null };
+  }
+
+  if (exactError) {
+    return { claim: null, error: exactError.message };
+  }
+
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(normalizedRef)) {
+    const { data: idClaim, error: idError } = await supabase
+      .from('claims')
+      .select('*')
+      .eq('id', normalizedRef)
+      .maybeSingle();
+
+    if (idClaim) {
+      return { claim: idClaim as Claim, error: null };
+    }
+
+    if (idError) {
+      return { claim: null, error: idError.message };
+    }
+  }
+
+  if (!/^(?=.*\d)[a-z0-9]{4,12}$/.test(normalizedRef)) {
+    return { claim: null, error: 'Claim not found.' };
+  }
+
+  const { data: suffixMatches, error: suffixError } = await supabase
+    .from('claims')
+    .select('*')
+    .ilike('slug', `%-${normalizedRef}`)
+    .limit(2);
+
+  if (suffixError) {
+    return { claim: null, error: suffixError.message };
+  }
+
+  if (suffixMatches?.length === 1) {
+    return { claim: suffixMatches[0] as Claim, error: null };
+  }
+
+  if ((suffixMatches?.length ?? 0) > 1) {
+    return { claim: null, error: 'That short claim URL matches more than one claim.' };
+  }
+
+  return { claim: null, error: 'Claim not found.' };
 }
 
 function getAuthRedirectUrl(nextPath: string) {
