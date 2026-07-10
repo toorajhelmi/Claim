@@ -257,15 +257,23 @@ canvas {
   backdrop-filter: blur(18px);
 }
 
-.app-menu nav a {
+.app-menu nav a,
+.app-menu nav button {
+  width: 100%;
   padding: 0.75rem 0.85rem;
   color: rgba(248, 251, 255, 0.84);
+  text-align: left;
+  font: inherit;
   font-size: 0.9rem;
   font-weight: 850;
+  border: 0;
   border-radius: 0.72rem;
+  background: transparent;
+  cursor: pointer;
 }
 
-.app-menu nav a:hover {
+.app-menu nav a:hover,
+.app-menu nav button:hover {
   color: #fff;
   background: rgba(255, 255, 255, 0.07);
 }

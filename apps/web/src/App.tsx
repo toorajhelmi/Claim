@@ -520,6 +520,7 @@ type UnifiedHomeData = {
 
 const finalOrReviewClaimStatuses: ClaimStatus[] = ['under_review', 'verified', 'not_proven', 'cancelled', 'disputed'];
 const discoverClaimStatuses: ClaimStatus[] = ['preview', 'open_for_backing', 'threshold_met', 'scheduled', 'live'];
+const supporterUpcomingClaimStatuses: ClaimStatus[] = ['preview', 'open_for_backing', 'threshold_met', 'scheduled'];
 
 function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
   const [loading, setLoading] = useState(true);
@@ -645,6 +646,9 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
   const recordingAssignmentCards = activeRecorderCards.filter((card) => !finalOrReviewClaimStatuses.includes(card.claim.status));
   const actionCards = createHomeActionCards(homeData, ownedCards, activeRecorderCards, supportedCards);
   const activityCards = createActivityCards(homeData, ownedCards, activeRecorderCards, supportedCards);
+  const supportedLiveCards = supportedCards.filter((card) => card.claim.status === 'live');
+  const upcomingSupportedCards = supportedCards.filter((card) => supporterUpcomingClaimStatuses.includes(card.claim.status));
+  const pastSupportedCards = supportedCards.filter((card) => finalOrReviewClaimStatuses.includes(card.claim.status));
   const shortcutCards = createHomeShortcutCards({
     actionCount: new Set(actionCards.map((action) => action.claimId)).size,
     activityCount: activityCards.length,
@@ -698,11 +702,11 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
           />
         ) : null}
         {activeTab === 'supporting' ? (
-          <HomeRail
-            eyebrow="Supporting"
-            title="Claims you pledged to."
-            cards={supportedCards}
-            emptyText="No pledged claims yet. Discover a claim to support."
+          <SupportingView
+            discoverCards={prioritizeHomeDiscoveryCards(discoverCards).slice(0, 6)}
+            liveCards={supportedLiveCards}
+            pastCards={pastSupportedCards}
+            upcomingCards={upcomingSupportedCards}
           />
         ) : null}
       </main>
@@ -749,6 +753,49 @@ function DiscoverView({ claimCards }: { claimCards: HomeClaimCard[] }) {
         </div>
         <HomeClaimCardList cards={claimCards} emptyText="No public claims are ready to discover yet." />
       </section>
+    </div>
+  );
+}
+
+function SupportingView({
+  discoverCards,
+  liveCards,
+  pastCards,
+  upcomingCards,
+}: {
+  discoverCards: HomeClaimCard[];
+  liveCards: HomeClaimCard[];
+  pastCards: HomeClaimCard[];
+  upcomingCards: HomeClaimCard[];
+}) {
+  return (
+    <div className="unified-home-grid">
+      <HomeRail
+        eyebrow="Live now"
+        title="Supported events you can join."
+        cards={liveCards}
+        emptyText="No supported events are live right now."
+      />
+      <HomeRail
+        eyebrow="Upcoming supported"
+        title="Claims you backed before they go live."
+        cards={upcomingCards}
+        emptyText="No upcoming supported claims yet."
+      />
+      <HomeRail
+        eyebrow="Past supported"
+        title="Outcomes and review status."
+        cards={pastCards}
+        emptyText="No past supported outcomes yet."
+      />
+      <HomeRail
+        eyebrow="Discover more"
+        title="Other claims you could support."
+        cards={discoverCards}
+        emptyText="No public claims are ready to discover yet."
+        ctaHref="/discover"
+        ctaLabel="Browse all"
+      />
     </div>
   );
 }
@@ -1328,8 +1375,8 @@ function LandingPage() {
           <a href="#creators">Claimers</a>
           <a href="#apply">Apply</a>
         </nav>
-        <a className="nav-cta" href="/claims/new">
-          Run a claim
+        <a className="nav-cta" href="/auth?next=/">
+          Sign in
         </a>
       </header>
 
@@ -1660,6 +1707,10 @@ function getRoute(pathname: string):
     return { name: 'unified-app', tab: 'discover' };
   }
 
+  if (parts[0] === 'support') {
+    return { name: 'unified-app', tab: 'discover' };
+  }
+
   if (parts[0] === 'activity') {
     return { name: 'unified-app', tab: 'activity' };
   }
@@ -1704,6 +1755,30 @@ function AppChrome({ children, immersive = false }: { children: ReactNode; immer
   const currentPath = window.location.pathname;
   const activeNavigationKey = getActiveAppNavigationKey(currentPath);
   const showAppTabBar = !immersive && !currentPath.startsWith('/auth');
+  const [isSignedIn, setIsSignedIn] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadAuthState() {
+      const { data } = await supabase.auth.getUser();
+
+      if (mounted) {
+        setIsSignedIn(Boolean(data.user));
+      }
+    }
+
+    void loadAuthState();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    window.location.href = '/';
+  }
 
   return (
     <div className={immersive ? 'app-chrome app-chrome-immersive' : 'app-chrome app-chrome-product'}>
@@ -1717,16 +1792,17 @@ function AppChrome({ children, immersive = false }: { children: ReactNode; immer
               <span />
             </span>
           </summary>
-          <nav aria-label="App navigation">
-            <a href="/">Home</a>
-            <a href="/discover">Discover</a>
-            {isCreatePage ? null : <a href="/claims/new">New claim</a>}
-            <a href="/my-claims">My claims</a>
-            <a href="/recording">Recording</a>
-            <a href="/supporting">Supporting</a>
-            <a href="/activity">Activity</a>
-            <a href="/profile">Profile</a>
-            <a href="/#examples">Landing examples</a>
+          <nav aria-label="Account actions">
+            {isCreatePage ? null : <a href="/claims/new">Create claim</a>}
+            <a href="/support">Support a claim</a>
+            <a href="/#how-it-works">How it works</a>
+            {isSignedIn ? (
+              <button type="button" onClick={() => void handleSignOut()}>
+                Sign out
+              </button>
+            ) : (
+              <a href={`/auth?next=${encodeURIComponent(currentPath)}`}>Sign in</a>
+            )}
           </nav>
         </details>
       )}
