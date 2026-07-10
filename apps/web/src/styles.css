@@ -341,10 +341,10 @@ canvas {
 
 .hero {
   display: grid;
-  gap: 2.25rem;
+  gap: 1.6rem;
   align-items: center;
-  min-height: calc(100vh - 4rem);
-  padding: 2rem 0 5rem;
+  min-height: auto;
+  padding: 1.25rem 0 3rem;
 }
 
 .dramatic-hero {
@@ -422,7 +422,7 @@ h3 {
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.8rem;
-  margin: 2rem 0;
+  margin: 1.45rem 0 0;
 }
 
 .button {
@@ -479,24 +479,20 @@ h3 {
   background: linear-gradient(135deg, rgba(112, 255, 139, 0.86), rgba(255, 255, 255, 0.82));
 }
 
-.signal-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.8rem;
-  max-width: 680px;
-  margin: 0 auto;
-}
-
 .cinema-stage {
   position: relative;
   max-width: 100%;
-  min-height: clamp(520px, 68vw, 760px);
+  min-height: clamp(430px, 60vw, 680px);
   overflow: clip;
 }
 
 .cinema-video {
-  min-height: clamp(500px, 66vw, 740px);
+  position: relative;
+  display: flex;
+  min-height: clamp(410px, 58vw, 660px);
+  flex-direction: column;
   justify-content: space-between;
+  overflow: hidden;
   padding: clamp(1rem, 3vw, 2rem);
   border-radius: clamp(1.4rem, 4vw, 3rem);
   background:
@@ -511,14 +507,24 @@ h3 {
 }
 
 .cinema-video::before {
+  position: absolute;
   inset: clamp(0.7rem, 2vw, 1.5rem);
+  content: "";
   border-style: solid;
   border-color: rgba(255, 255, 255, 0.12);
 }
 
 .cinema-video::after {
+  position: absolute;
+  top: 15%;
+  left: -25%;
+  width: 150%;
   height: 16rem;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
   opacity: 0.78;
+  transform: rotate(-18deg);
+  animation: scan 4.5s linear infinite;
 }
 
 .cinema-video-media {
@@ -533,8 +539,7 @@ h3 {
 }
 
 .cinema-video .cinema-live-bar,
-.cinema-video .cinema-content,
-.cinema-video .cinema-play {
+.cinema-video .cinema-content {
   position: relative;
   z-index: 3;
 }
@@ -581,33 +586,6 @@ h3 {
   line-height: 1.6;
 }
 
-.cinema-play {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  display: grid;
-  width: clamp(4.8rem, 10vw, 7rem);
-  height: clamp(4.8rem, 10vw, 7rem);
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 999px;
-  background: rgba(5, 7, 13, 0.5);
-  box-shadow:
-    0 0 80px rgba(112, 255, 139, 0.28),
-    inset 0 0 30px rgba(255, 255, 255, 0.06);
-  transform: translate(-50%, -50%);
-  backdrop-filter: blur(16px);
-}
-
-.cinema-play span {
-  width: 0;
-  height: 0;
-  margin-left: 0.35rem;
-  border-top: 1rem solid transparent;
-  border-bottom: 1rem solid transparent;
-  border-left: 1.55rem solid var(--green);
-}
-
 .cinema-card {
   position: absolute;
   z-index: 4;
@@ -644,26 +622,6 @@ h3 {
 
 .cinema-proof-card li + li {
   margin-top: 0.55rem;
-}
-
-.signal-row div {
-  min-height: 7rem;
-  padding: 1rem;
-  border: 1px solid var(--line);
-  border-radius: 1.25rem;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.signal-row strong {
-  display: block;
-  margin-bottom: 0.4rem;
-  font-size: 1.65rem;
-  font-weight: 900;
-}
-
-.signal-row span {
-  color: var(--muted);
-  font-size: 0.9rem;
 }
 
 .hero-stage {
@@ -838,8 +796,7 @@ h3 {
 }
 
 .card-meta,
-.example-top,
-.payout-row {
+.example-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -923,9 +880,8 @@ h3 {
 .examples-section,
 .creator-section,
 .proof-section,
-.apply-section,
-.video-strip {
-  padding: 6rem 0;
+.apply-section {
+  padding: 3.75rem 0;
 }
 
 .section-heading {
@@ -950,7 +906,6 @@ h3 {
 
 .step-card,
 .example-card,
-.payout-card,
 .apply-card,
 .proof-board {
   border: 1px solid var(--line);
@@ -990,25 +945,6 @@ h3 {
 .example-card p {
   color: var(--muted);
   line-height: 1.55;
-}
-
-.video-strip {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: 1rem;
-}
-
-.video-tile {
-  min-height: 280px;
-}
-
-.video-tile.tall {
-  min-height: 590px;
-}
-
-.video-stack {
-  display: grid;
-  gap: 1rem;
 }
 
 .claim-grid {
@@ -1053,7 +989,7 @@ h3 {
 
 .creator-section {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(320px, 0.7fr);
+  grid-template-columns: minmax(0, 0.9fr);
   gap: 2rem;
   align-items: center;
 }
@@ -1069,38 +1005,6 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 1rem;
   background: rgba(255, 255, 255, 0.06);
-}
-
-.creator-panel {
-  display: flex;
-  justify-content: center;
-}
-
-.payout-card {
-  width: min(420px, 100%);
-  padding: 1.3rem;
-  border-radius: 1.6rem;
-  background:
-    linear-gradient(135deg, rgba(255, 79, 216, 0.18), transparent 45%),
-    var(--panel);
-}
-
-.payout-card h3 {
-  font-size: 2.6rem;
-}
-
-.payout-card p {
-  color: var(--muted);
-  line-height: 1.55;
-}
-
-.payout-row {
-  padding: 1rem 0;
-  border-top: 1px solid var(--line);
-}
-
-.payout-row span {
-  color: var(--muted);
 }
 
 .proof-board {
@@ -1323,32 +1227,27 @@ h3 {
   .hero,
   .creator-section,
   .proof-board,
-  .video-strip,
   .split-heading {
     grid-template-columns: 1fr;
   }
 
   .hero {
     min-height: auto;
-    padding-top: 2.5rem;
+    padding-top: 1rem;
   }
 
   .cinema-stage {
-    min-height: 650px;
+    min-height: 520px;
   }
 
   .cinema-video {
-    min-height: 630px;
+    min-height: 500px;
   }
 
   .cinema-content h2 {
     font-size: clamp(2.5rem, 11vw, 4.4rem);
     line-height: 1;
     letter-spacing: -0.028em;
-  }
-
-  .cinema-play {
-    top: 42%;
   }
 
   .cinema-proof-card {
@@ -1397,7 +1296,6 @@ h3 {
     letter-spacing: -0.025em;
   }
 
-  .signal-row,
   .steps-grid {
     grid-template-columns: 1fr;
   }
@@ -1407,11 +1305,11 @@ h3 {
   }
 
   .cinema-stage {
-    min-height: 700px;
+    min-height: 500px;
   }
 
   .cinema-video {
-    min-height: 680px;
+    min-height: 480px;
   }
 
   .cinema-live-bar {
@@ -1424,7 +1322,7 @@ h3 {
   }
 
   .cinema-content {
-    padding-bottom: 8rem;
+    padding-bottom: 7.5rem;
   }
 
   .cinema-content h2 {

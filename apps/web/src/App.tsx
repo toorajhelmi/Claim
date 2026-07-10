@@ -14,12 +14,6 @@ type ClaimExample = {
   meta: string;
 };
 
-type VideoPlaceholder = {
-  label: string;
-  title: string;
-  description: string;
-};
-
 const claimExamples: ClaimExample[] = [
   {
     title:
@@ -65,27 +59,6 @@ const claimExamples: ClaimExample[] = [
     detail: 'pledged by 341 supporters',
     status: 'Proving',
     meta: 'Run pending',
-  },
-];
-
-const videoPlaceholders: VideoPlaceholder[] = [
-  {
-    label: 'Video area 1',
-    title: 'Claimer announcement reel',
-    description:
-      'Vertical social video. Claimer talks directly to camera, makes a bold claim, shows the stake, and points to a countdown plus supporter wall.',
-  },
-  {
-    label: 'Video area 2',
-    title: 'Pledge surge moment',
-    description:
-      'Fast montage of comments, supporter avatars, and pledge counter rising while the claimer reacts to the audience backing the attempt.',
-  },
-  {
-    label: 'Video area 3',
-    title: 'Proof and result moment',
-    description:
-      'Final attempt clip, checklist items lighting up, reviewer note sliding in, then a VERIFIED or NOT PROVEN result screen.',
   },
 ];
 
@@ -1383,7 +1356,7 @@ function LandingPage() {
       <main>
         <section className="hero dramatic-hero section-shell">
           <div className="cinema-stage" aria-label="Featured claim video preview">
-            <div className="video-placeholder cinema-video">
+            <div className="cinema-video">
               <video
                 className="cinema-video-media"
                 src={heroVideoSrc}
@@ -1400,7 +1373,6 @@ function LandingPage() {
                 <span>$5,940 pledged</span>
               </div>
               <div className="cinema-content">
-                <p className="video-label">Featured claim video placeholder</p>
                 <h2>Across the city. Chat controls the route. Sunset deadline.</h2>
                 <p>
                   Video description: cinematic opening on the claimer at the
@@ -1410,9 +1382,6 @@ function LandingPage() {
                   rising, final destination arrival, then a VERIFIED result
                   card.
                 </p>
-              </div>
-              <div className="cinema-play" aria-hidden="true">
-                <span />
               </div>
             </div>
 
@@ -1450,20 +1419,6 @@ function LandingPage() {
               <a className="button button-ghost" href="#examples">
                 See live formats
               </a>
-            </div>
-            <div className="signal-row" aria-label="Pilot signals">
-              <div>
-                <strong>$127K</strong>
-                <span>example pledge volume</span>
-              </div>
-              <div>
-                <strong>48h</strong>
-                <span>claim windows</span>
-              </div>
-              <div>
-                <strong>0</strong>
-                <span>odds or betting positions</span>
-              </div>
             </div>
           </div>
         </section>
@@ -1507,19 +1462,6 @@ function LandingPage() {
               <h3>Earn if verified</h3>
               <p>The claimer earns the pledge pool when the claim is proved.</p>
             </article>
-          </div>
-        </section>
-
-        <section className="section-shell video-strip" aria-label="Video plan">
-          <div className="video-tile tall">
-            <VideoPlaceholderCard {...videoPlaceholders[0]} />
-          </div>
-          <div className="video-stack">
-            {videoPlaceholders.slice(1).map((placeholder) => (
-              <div className="video-tile" key={placeholder.label}>
-                <VideoPlaceholderCard {...placeholder} />
-              </div>
-            ))}
           </div>
         </section>
 
@@ -1573,25 +1515,6 @@ function LandingPage() {
               <li>Rules are locked before supporters back it.</li>
               <li>No odds, no betting positions, no supporter winnings by default.</li>
             </ul>
-          </div>
-          <div className="creator-panel">
-            <div className="payout-card">
-              <span className="status live">Claimer upside</span>
-              <h3>$4,620 pledge pool</h3>
-              <p>If verified, payout goes to the claimer minus platform fee.</p>
-              <div className="payout-row">
-                <span>Backers</span>
-                <strong>296</strong>
-              </div>
-              <div className="payout-row">
-                <span>Proof items</span>
-                <strong>5 / 6</strong>
-              </div>
-              <div className="payout-row">
-                <span>Deadline</span>
-                <strong>11:59 PM</strong>
-              </div>
-            </div>
           </div>
         </section>
 
@@ -1665,16 +1588,6 @@ function LandingPage() {
         <p>Make a claim. Back the attempt. Verify the outcome.</p>
       </footer>
     </>
-  );
-}
-
-function VideoPlaceholderCard({ label, title, description }: VideoPlaceholder) {
-  return (
-    <div className="video-placeholder">
-      <p className="video-label">{label}</p>
-      <h3>{title}</h3>
-      <p>{description}</p>
-    </div>
   );
 }
 
