@@ -655,12 +655,7 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
             <div className="home-hero-actions">
               <a className="button button-ghost" href="/claims/new">Create claim</a>
             </div>
-          ) : (
-            <div className="live-empty-stage" data-testid="live-empty-stage">
-              <strong>Waiting for streams</strong>
-              <p>Claimer or recorder video will appear here as soon as someone starts streaming.</p>
-            </div>
-          )}
+          ) : null}
         </section>
 
         {activeTab === 'home' ? (
@@ -4585,12 +4580,7 @@ function RecorderInvitePage({ token }: { token: string }) {
                 <button className="button button-primary" type="submit">Accept recorder role</button>
               </form>
             </>
-          ) : (
-            <div className="live-empty-stage" data-testid="live-empty-stage">
-              <strong>Waiting for streams</strong>
-              <p>Claimer or recorder video will appear here as soon as someone starts streaming.</p>
-            </div>
-          )}
+          ) : null}
           {message ? <p className="form-message">{message}</p> : null}
         </section>
       </main>
@@ -5097,7 +5087,12 @@ function LiveRoomSession({
                 variant="featured"
               />
             </div>
-          ) : null}
+          ) : (
+            <div className="live-empty-stage" data-testid="live-empty-stage">
+              <strong>Waiting for streams</strong>
+              <p>Claimer or recorder video will appear here as soon as someone starts streaming.</p>
+            </div>
+          )}
           {thumbnailTiles.length > 0 ? (
             <div className="live-stream-strip" data-testid="live-stream-strip" aria-label="Available live streams">
               {thumbnailTiles.map((tile) => (
