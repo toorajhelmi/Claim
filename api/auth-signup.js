@@ -9,25 +9,88 @@ function normalizeOrigin(origin) {
   return origin.endsWith('/') ? origin.slice(0, -1) : origin;
 }
 
+function isLocalOrigin(origin) {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(normalizeOrigin(origin));
+}
+
+function getTrustedOrigin(request) {
+  const configuredOrigins = [
+    process.env.APP_ORIGIN,
+    process.env.VITE_AUTH_REDIRECT_ORIGIN,
+    process.env.VITE_APP_DOMAIN ? `https://${String(process.env.VITE_APP_DOMAIN).replace(/^https?:\/\//, '')}` : '',
+  ];
+
+  const configuredOrigin = configuredOrigins
+    .map((origin) => normalizeOrigin(String(origin || '').trim()))
+    .find((origin) => origin && !isLocalOrigin(origin));
+
+  if (configuredOrigin) {
+    return configuredOrigin;
+  }
+
+  const forwardedHost = String(request.headers['x-forwarded-host'] || '').split(',')[0].trim();
+  const forwardedProto = String(request.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
+  const requestOrigin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : '';
+
+  if (requestOrigin && !isLocalOrigin(requestOrigin)) {
+    return normalizeOrigin(requestOrigin);
+  }
+
+  return 'https://klaimd.app';
+}
+
+function getSafeNextPath(redirectTo) {
+  try {
+    const redirectUrl = new URL(String(redirectTo));
+    const nextPath = redirectUrl.searchParams.get('next') || '/claims/new';
+
+    return nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : '/claims/new';
+  } catch {
+    return '/claims/new';
+  }
+}
+
+function buildSafeRedirectTo(request, redirectTo) {
+  const origin = getTrustedOrigin(request);
+  const nextPath = getSafeNextPath(redirectTo);
+
+  return `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function buildConfirmationHtml({ appName, actionLink, displayName }) {
-  const greeting = displayName ? `Hi ${displayName},` : 'Hi,';
+  const safeAppName = escapeHtml(appName);
+  const safeActionLink = escapeHtml(actionLink);
+  const greeting = displayName ? `Hi ${escapeHtml(displayName)},` : 'Hi,';
 
   return `
-    <div style="font-family:Inter,Arial,sans-serif;background:#05070d;color:#f8fbff;padding:32px">
-      <div style="max-width:560px;margin:0 auto;background:#10141f;border-radius:24px;padding:28px">
-        <h1 style="margin:0 0 16px;font-size:32px;line-height:1.05">Confirm your ${appName} account</h1>
+    <div style="font-family:Arial,sans-serif;background-color:#05070d;color:#f8fbff;padding:32px">
+      <div style="max-width:560px;margin:0 auto;background-color:#10141f;border-radius:24px;padding:28px">
+        <h1 style="margin:0 0 16px;font-size:32px;line-height:1.05;color:#f8fbff">Confirm your ${safeAppName} account</h1>
         <p style="color:#cbd2df;font-size:16px;line-height:1.6">${greeting}</p>
         <p style="color:#cbd2df;font-size:16px;line-height:1.6">
           Confirm your email to continue setting up your live proof claim.
         </p>
-        <p style="margin:28px 0">
-          <a href="${actionLink}" style="display:inline-block;background:linear-gradient(135deg,#70ff8b,#42ddff);color:#041006;text-decoration:none;font-weight:800;border-radius:999px;padding:14px 22px">
-            Confirm email
-          </a>
-        </p>
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0">
+          <tr>
+            <td bgcolor="#70ff8b" style="border-radius:14px;background-color:#70ff8b">
+              <a href="${safeActionLink}" style="display:inline-block;padding:14px 22px;color:#041006 !important;text-decoration:none;font-weight:800;font-size:16px;line-height:20px">
+                Confirm email
+              </a>
+            </td>
+          </tr>
+        </table>
         <p style="color:#8d96a8;font-size:13px;line-height:1.6">
           If the button does not work, copy and paste this link into your browser:<br />
-          <span style="word-break:break-all">${actionLink}</span>
+          <a href="${safeActionLink}" style="color:#70ff8b;word-break:break-all">${safeActionLink}</a>
         </p>
       </div>
     </div>
@@ -74,6 +137,7 @@ module.exports = async function handler(request, response) {
   const resendApiKey = process.env.RESEND_API_KEY;
   const appName = process.env.VITE_APP_NAME || 'Klaimd';
   const fromEmail = process.env.RESEND_FROM_EMAIL || 'Klaimd <noreply@klaimd.app>';
+  const safeRedirectTo = buildSafeRedirectTo(request, redirectTo);
 
   if (!supabaseUrl || !serviceRoleKey || !resendApiKey) {
     json(response, 500, { error: 'Server email configuration is incomplete' });
@@ -121,7 +185,7 @@ module.exports = async function handler(request, response) {
         primary_platform: String(primaryPlatform),
         role: 'claimer',
       },
-      redirectTo: String(redirectTo),
+      redirectTo: safeRedirectTo,
     },
   });
 
@@ -172,6 +236,6 @@ module.exports = async function handler(request, response) {
   json(response, 200, {
     ok: true,
     email: normalizedEmail,
-    redirectOrigin: normalizeOrigin(new URL(String(redirectTo)).origin),
+    redirectOrigin: normalizeOrigin(new URL(safeRedirectTo).origin),
   });
 };
