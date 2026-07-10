@@ -4024,6 +4024,9 @@ function ClaimLivePage({ slug }: { slug: string }) {
   const [liveLifecycleStatus, setLiveLifecycleStatus] = useState<'idle' | 'submitting'>('idle');
   const [liveLifecycleMessage, setLiveLifecycleMessage] = useState('');
   const [endConfirmationOpen, setEndConfirmationOpen] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
+  const [hasSupporterPledge, setHasSupporterPledge] = useState(false);
+  const [pledgeAccessLoading, setPledgeAccessLoading] = useState(false);
 
   useEffect(() => {
     async function loadViewerRole() {
@@ -4033,20 +4036,26 @@ function ClaimLivePage({ slug }: { slug: string }) {
       const user = userData.user;
 
       if (!user) {
+        setCurrentUserEmail('');
+        setHasSupporterPledge(false);
         setViewerRole('supporter');
         return;
       }
 
+      const userEmail = user.email?.toLowerCase() ?? '';
+      setCurrentUserEmail(userEmail);
+
       if (user.id === data.claim.creator_id) {
+        setHasSupporterPledge(true);
         setViewerRole('claimer');
         return;
       }
 
-      const userEmail = user.email?.toLowerCase();
       const recorderInvite = data.recorderInvites.find(
         (invite) => userEmail && invite.invitee_contact?.toLowerCase() === userEmail,
       );
 
+      setHasSupporterPledge(Boolean(recorderInvite));
       setViewerRole(recorderInvite ? 'recorder' : 'supporter');
     }
 
@@ -4061,6 +4070,50 @@ function ClaimLivePage({ slug }: { slug: string }) {
     replaceBrowserPath(getClaimLivePath(data.claim));
   }, [data?.claim.id, data?.claim.slug]);
 
+  useEffect(() => {
+    const claim = data?.claim;
+
+    if (!claim || claim.pledge_threshold_cents <= 0 || viewerRole !== 'supporter') {
+      setPledgeAccessLoading(false);
+      if (viewerRole === 'supporter') {
+        setHasSupporterPledge(false);
+      }
+      return;
+    }
+
+    if (!currentUserEmail) {
+      setHasSupporterPledge(false);
+      setPledgeAccessLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const claimId = claim.id;
+
+    async function loadSupporterPledge() {
+      setPledgeAccessLoading(true);
+      const { data: pledge } = await supabase
+        .from('claim_pledges')
+        .select('id')
+        .eq('claim_id', claimId)
+        .ilike('supporter_email', currentUserEmail)
+        .in('status', ['intent', 'authorized', 'collected'])
+        .limit(1)
+        .maybeSingle();
+
+      if (!cancelled) {
+        setHasSupporterPledge(Boolean(pledge));
+        setPledgeAccessLoading(false);
+      }
+    }
+
+    void loadSupporterPledge();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserEmail, data?.claim.id, data?.claim.pledge_threshold_cents, viewerRole]);
+
   if (loading) return <LoadingPage label="Opening live room..." />;
   if (error || !data) return <ErrorPage message={error ?? 'Claim not found.'} />;
 
@@ -4074,6 +4127,13 @@ function ClaimLivePage({ slug }: { slug: string }) {
   const isAfterOfficialLive = ['under_review', 'verified', 'not_proven', 'cancelled', 'disputed'].includes(claim.status);
   const liveRoomMode: LiveRoomMode = claim.status === 'live' ? 'official' : 'test';
   const canManageOfficialEvent = viewerRole === 'claimer';
+  const isPaidClaim = claim.pledge_threshold_cents > 0;
+  const shouldGatePaidLiveAccess =
+    !liveStageActive &&
+    isOfficialLive &&
+    viewerRole === 'supporter' &&
+    isPaidClaim &&
+    (pledgeAccessLoading || !hasSupporterPledge);
 
   async function runOfficialEventAction(action: 'start' | 'end' | 'reopen') {
     setLiveLifecycleStatus('submitting');
@@ -4130,7 +4190,31 @@ function ClaimLivePage({ slug }: { slug: string }) {
     <AppChrome immersive={liveStageActive}>
       <main className={`app-page section-shell ${liveStageActive ? 'live-stage-page' : ''}`}>
         {!liveStageActive && !isOfficialLive ? <ClaimHeader claim={data.claim} label="LIVE ROOM" /> : null}
-        {!isAfterOfficialLive ? (
+        {shouldGatePaidLiveAccess ? (
+          <section className="mvp-panel access-gate-panel">
+            <p className="eyebrow">Pledge required</p>
+            <h2>{pledgeAccessLoading ? 'Checking pledge access.' : 'Back this paid claim to watch live.'}</h2>
+            <p>
+              This claim has a pledge threshold. Supporters need to pledge before joining the live room while the
+              outcome is still being determined.
+            </p>
+            {!pledgeAccessLoading ? (
+              <div className="action-grid compact-action-grid">
+                <a className="button button-primary" href={getClaimDetailPath(data.claim, '?tab=backing')}>
+                  Pledge to join
+                </a>
+                {!currentUserEmail ? (
+                  <a className="button button-ghost" href={`/auth?next=${encodeURIComponent(getClaimLivePath(data.claim))}`}>
+                    Sign in
+                  </a>
+                ) : null}
+                <a className="button button-ghost" href={getClaimDetailPath(data.claim)}>
+                  Claim overview
+                </a>
+              </div>
+            ) : null}
+          </section>
+        ) : !isAfterOfficialLive ? (
           <div className={`mvp-layout live-layout ${isOfficialLive ? 'live-layout-solo' : ''}`}>
             <section className={`mvp-panel live-video-panel ${isOfficialLive && !liveStageActive ? 'live-video-panel-compact' : ''} ${liveStageActive ? 'live-video-panel-active' : ''}`}>
               {!liveStageActive && !isOfficialLive ? <p className="eyebrow">Room preview</p> : null}
@@ -4165,7 +4249,7 @@ function ClaimLivePage({ slug }: { slug: string }) {
             </aside> : null}
           </div>
         ) : null}
-        {!liveStageActive ? (
+        {!liveStageActive && !shouldGatePaidLiveAccess ? (
           <OfficialEventPanel
             canManage={canManageOfficialEvent}
             claim={data.claim}
