@@ -184,6 +184,15 @@ type Checkin = {
   checked_in_at: string;
 };
 
+type LiveRoomRecord = {
+  id: string;
+  claim_id: string;
+  livekit_room_name: string;
+  recording_url: string | null;
+  opened_at: string | null;
+  closed_at: string | null;
+};
+
 type SupporterInput = {
   id: string;
   claim_id: string;
@@ -201,6 +210,7 @@ type ClaimBundle = {
   recorderInvites: RecorderInvite[];
   proofEvents: ProofEvent[];
   checkins: Checkin[];
+  liveRoom: LiveRoomRecord | null;
 };
 
 type ClaimDetailTabKey = 'overview' | 'backing' | 'proof' | 'live';
@@ -645,7 +655,12 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
             <div className="home-hero-actions">
               <a className="button button-ghost" href="/claims/new">Create claim</a>
             </div>
-          ) : null}
+          ) : (
+            <div className="live-empty-stage" data-testid="live-empty-stage">
+              <strong>Waiting for streams</strong>
+              <p>Claimer or recorder video will appear here as soon as someone starts streaming.</p>
+            </div>
+          )}
         </section>
 
         {activeTab === 'home' ? (
@@ -4399,6 +4414,28 @@ function ClaimResultPage({ slug }: { slug: string }) {
             the live room.
           </p>
         </section>
+        <section className="mvp-panel replay-panel">
+          <p className="eyebrow">Replay</p>
+          <h2>Recorded event.</h2>
+          {data.liveRoom?.recording_url ? (
+            <>
+              <video
+                className="event-replay-video"
+                controls
+                data-testid="event-replay-video"
+                playsInline
+                src={data.liveRoom.recording_url}
+              />
+              <a className="button button-ghost" href={data.liveRoom.recording_url} rel="noreferrer" target="_blank">
+                Open recording
+              </a>
+            </>
+          ) : (
+            <p className="form-message" data-testid="event-replay-missing">
+              Recording is not attached yet. Once LiveKit egress stores the event recording, the replay will appear here.
+            </p>
+          )}
+        </section>
         <Timeline events={data.proofEvents} checkins={data.checkins} />
       </main>
     </AppChrome>
@@ -4612,14 +4649,18 @@ function LiveRoomSession({
   const [chatDraft, setChatDraft] = useState('');
   const [supporterInputStatus, setSupporterInputStatus] = useState('');
   const [floatingInteractions, setFloatingInteractions] = useState<FloatingLiveInteraction[]>([]);
+  const [featuredTileId, setFeaturedTileId] = useState<string | null>(null);
+  const canPublishInRoomRef = useRef(false);
   const seenFloatingInteractionIdsRef = useRef<Set<string>>(new Set());
   const supporterInputsLoadedRef = useRef(false);
   const isOfficialMode = mode === 'official';
   const canPublishInRoom = Boolean(tokenDetails?.canPublish);
+  const tileSignature = tiles.map((tile) => tile.id).join('|');
 
   useEffect(() => {
     return () => {
       onConnectionChange?.(false);
+      canPublishInRoomRef.current = false;
       roomRef.current?.disconnect();
       roomRef.current = null;
     };
@@ -4720,7 +4761,12 @@ function LiveRoomSession({
   }
 
   function refreshTiles(room: Room) {
-    setTiles(collectLiveRoomTiles(room, cameraFacingModeRef.current, hideLocalPreviewRef.current));
+    setTiles(collectLiveRoomTiles(
+      room,
+      cameraFacingModeRef.current,
+      hideLocalPreviewRef.current,
+      canPublishInRoomRef.current,
+    ));
   }
 
   async function enableCamera({
@@ -4738,7 +4784,7 @@ function LiveRoomSession({
     cameraFacingModeRef.current = facingMode;
     const activeDeviceId = getLocalCameraDeviceId(room);
     selectedCameraDeviceIdRef.current = activeDeviceId ?? deviceId ?? null;
-    setTiles(collectLiveRoomTiles(room, facingMode, hideLocalPreviewRef.current));
+    setTiles(collectLiveRoomTiles(room, facingMode, hideLocalPreviewRef.current, true));
   }
 
   async function getVideoInputDevices() {
@@ -4773,6 +4819,7 @@ function LiveRoomSession({
     try {
       roomRef.current?.disconnect();
       const livekitToken = await requestLiveRoomToken(mode);
+      canPublishInRoomRef.current = livekitToken.canPublish;
       const room = new Room({
         adaptiveStream: true,
         dynacast: true,
@@ -4795,10 +4842,12 @@ function LiveRoomSession({
       room.on(RoomEvent.Disconnected, () => {
         setConnectionState('idle');
         onConnectionChange?.(false);
+        canPublishInRoomRef.current = false;
         setCameraOn(false);
         setSwitchingCamera(false);
         setMicOn(false);
         setChatOpen(true);
+      setFeaturedTileId(null);
         setTiles([]);
       });
 
@@ -4820,6 +4869,7 @@ function LiveRoomSession({
       roomRef.current = null;
       setConnectionState('error');
       onConnectionChange?.(false);
+      canPublishInRoomRef.current = false;
       setCameraOn(false);
       setMicOn(false);
       setTiles([]);
@@ -4868,7 +4918,7 @@ function LiveRoomSession({
           setCameraOn(true);
           setCameraFacingMode(nextFacingMode);
           cameraFacingModeRef.current = nextFacingMode;
-          setTiles(collectLiveRoomTiles(room, nextFacingMode, hideLocalPreviewRef.current));
+          setTiles(collectLiveRoomTiles(room, nextFacingMode, hideLocalPreviewRef.current, true));
           setRoomMessage('');
           return;
         }
@@ -4911,11 +4961,13 @@ function LiveRoomSession({
     roomRef.current = null;
     setConnectionState('idle');
     onConnectionChange?.(false);
+    canPublishInRoomRef.current = false;
     setCameraOn(false);
     selectedCameraDeviceIdRef.current = null;
     setSwitchingCamera(false);
     setMicOn(false);
     setChatOpen(true);
+    setFeaturedTileId(null);
     setTiles([]);
     setRoomMessage(`${sessionLabel.charAt(0).toUpperCase()}${sessionLabel.slice(1)} closed on this device.`);
   }
@@ -4930,7 +4982,7 @@ function LiveRoomSession({
     const room = roomRef.current;
 
     if (room) {
-      setTiles(collectLiveRoomTiles(room, cameraFacingModeRef.current, nextHiddenState));
+      setTiles(collectLiveRoomTiles(room, cameraFacingModeRef.current, nextHiddenState, canPublishInRoomRef.current));
     }
   }
 
@@ -4941,6 +4993,27 @@ function LiveRoomSession({
       counts[input.content] = (counts[input.content] ?? 0) + 1;
       return counts;
     }, {});
+  const featuredTile = tiles.find((tile) => tile.id === featuredTileId)
+    ?? tiles.find((tile) => !tile.isLocal && tile.videoTrack)
+    ?? tiles[0]
+    ?? null;
+  const thumbnailTiles = featuredTile ? tiles.filter((tile) => tile.id !== featuredTile.id) : tiles;
+
+  useEffect(() => {
+    if (!isConnected || tiles.length === 0) {
+      if (featuredTileId) {
+        setFeaturedTileId(null);
+      }
+      return;
+    }
+
+    const currentTileIsStillVisible = Boolean(featuredTileId && tiles.some((tile) => tile.id === featuredTileId));
+
+    if (!currentTileIsStillVisible) {
+      const nextFeaturedTile = tiles.find((tile) => !tile.isLocal && tile.videoTrack) ?? tiles[0];
+      setFeaturedTileId(nextFeaturedTile.id);
+    }
+  }, [featuredTileId, isConnected, tileSignature, tiles]);
 
   async function submitSupporterInput(inputType: 'chat' | 'reaction', rawContent: string) {
     if (!isOfficialMode) return;
@@ -5007,18 +5080,32 @@ function LiveRoomSession({
   return (
     <div className="livekit-panel">
       {isConnected ? (
-        <div className="live-room-stage">
-          <div className="live-room-tile-grid">
-            {tiles.map((tile) => (
+        <div className="live-room-stage" data-testid="live-room-stage">
+          {featuredTile ? (
+            <div className="live-featured-stream" data-testid="live-featured-stream">
               <LiveMediaTile
-                key={tile.id}
-                tile={tile}
-                onSwitchCamera={canPublishInRoom && tile.isLocal && cameraOn ? switchCamera : undefined}
+                key={featuredTile.id}
+                tile={featuredTile}
+                onSwitchCamera={canPublishInRoom && featuredTile.isLocal && cameraOn ? switchCamera : undefined}
                 switchCameraLabel={cameraFacingMode === 'user' ? 'Use back camera' : 'Use front camera'}
-                switchingCamera={tile.isLocal ? switchingCamera : false}
+                switchingCamera={featuredTile.isLocal ? switchingCamera : false}
+                variant="featured"
               />
-            ))}
-          </div>
+            </div>
+          ) : null}
+          {thumbnailTiles.length > 0 ? (
+            <div className="live-stream-strip" data-testid="live-stream-strip" aria-label="Available live streams">
+              {thumbnailTiles.map((tile) => (
+                <LiveMediaTile
+                  key={tile.id}
+                  onSelect={() => setFeaturedTileId(tile.id)}
+                  selected={tile.id === featuredTileId}
+                  tile={tile}
+                  variant="thumbnail"
+                />
+              ))}
+            </div>
+          ) : null}
           {roomMessage ? <p className="live-room-toast">{roomMessage}</p> : null}
           <div className="live-overlay-controls" aria-label="Live room controls">
             {canPublishInRoom ? (
@@ -5174,21 +5261,28 @@ function getLocalCameraDeviceId(room: Room) {
   return localVideoTrack?.mediaStreamTrack.getSettings().deviceId ?? null;
 }
 
-function collectLiveRoomTiles(room: Room, localFacingMode: 'user' | 'environment', hideLocalPreview: boolean): LiveRoomTile[] {
+function collectLiveRoomTiles(
+  room: Room,
+  localFacingMode: 'user' | 'environment',
+  hideLocalPreview: boolean,
+  includeLocalParticipant: boolean,
+): LiveRoomTile[] {
   const localVideoPublication = room.localParticipant.getTrackPublication(Track.Source.Camera);
   const localVideoTrack = localVideoPublication?.videoTrack instanceof LocalVideoTrack
     ? localVideoPublication.videoTrack
     : undefined;
   const localRole = room.localParticipant.attributes.role || 'claimer';
-  const tiles: LiveRoomTile[] = [{
-    id: `local:${room.localParticipant.identity}`,
-    participantName: room.localParticipant.name || 'You',
-    role: localRole,
-    isLocal: true,
-    facingMode: localFacingMode,
-    hideVideo: hideLocalPreview,
-    videoTrack: localVideoTrack,
-  }];
+  const tiles: LiveRoomTile[] = includeLocalParticipant
+    ? [{
+      id: `local:${room.localParticipant.identity}`,
+      participantName: room.localParticipant.name || 'You',
+      role: localRole,
+      isLocal: true,
+      facingMode: localFacingMode,
+      hideVideo: hideLocalPreview,
+      videoTrack: localVideoTrack,
+    }]
+    : [];
 
   room.remoteParticipants.forEach((participant) => {
     const videoPublication = participant.getTrackPublication(Track.Source.Camera);
@@ -5214,18 +5308,25 @@ function collectLiveRoomTiles(room: Room, localFacingMode: 'user' | 'environment
 }
 
 function LiveMediaTile({
+  onSelect,
   tile,
+  selected = false,
   onSwitchCamera,
   switchCameraLabel,
   switchingCamera = false,
+  variant = 'featured',
 }: {
+  onSelect?: () => void;
   tile: LiveRoomTile;
+  selected?: boolean;
   onSwitchCamera?: () => void;
   switchCameraLabel?: string;
   switchingCamera?: boolean;
+  variant?: 'featured' | 'thumbnail';
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const isSelectable = Boolean(onSelect);
 
   useEffect(() => {
     const videoElement = videoRef.current;
@@ -5258,7 +5359,21 @@ function LiveMediaTile({
   }, [tile.audioTrack]);
 
   return (
-    <div className="live-media-tile">
+    <div
+      className={`live-media-tile live-media-tile-${variant} ${selected ? 'selected' : ''}`}
+      data-live-local={tile.isLocal ? 'true' : 'false'}
+      data-live-role={String(tile.role)}
+      data-testid="live-media-tile"
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (isSelectable && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          onSelect?.();
+        }
+      }}
+      role={isSelectable ? 'button' : undefined}
+      tabIndex={isSelectable ? 0 : undefined}
+    >
       {tile.videoTrack && !tile.hideVideo ? (
         <video
           ref={videoRef}
@@ -5387,12 +5502,13 @@ function useClaimBundle(claimRef: string) {
       return;
     }
 
-    const [proofRules, pledges, recorderInvites, proofEvents, checkins] = await Promise.all([
+    const [proofRules, pledges, recorderInvites, proofEvents, checkins, liveRoom] = await Promise.all([
       supabase.from('claim_proof_rules').select('*').eq('claim_id', claim.id).order('position'),
       supabase.from('claim_pledges').select('id, supporter_name, supporter_handle, amount_cents, created_at').eq('claim_id', claim.id).order('created_at', { ascending: false }),
       supabase.from('claim_recorder_invites').select('*').eq('claim_id', claim.id).order('created_at', { ascending: false }),
       supabase.from('claim_proof_events').select('*').eq('claim_id', claim.id).order('event_time', { ascending: false }),
       supabase.from('claim_checkins').select('*').eq('claim_id', claim.id).order('checked_in_at', { ascending: false }),
+      supabase.from('claim_live_rooms').select('id, claim_id, livekit_room_name, recording_url, opened_at, closed_at').eq('claim_id', claim.id).maybeSingle(),
     ]);
 
     setData({
@@ -5402,6 +5518,7 @@ function useClaimBundle(claimRef: string) {
       recorderInvites: (recorderInvites.data ?? []) as RecorderInvite[],
       proofEvents: (proofEvents.data ?? []) as ProofEvent[],
       checkins: (checkins.data ?? []) as Checkin[],
+      liveRoom: liveRoom.data as LiveRoomRecord | null,
     });
     setLoading(false);
   }

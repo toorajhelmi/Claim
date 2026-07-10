@@ -10,6 +10,7 @@
     "build": "npm run build -w @claim/web",
     "db:apply": "node scripts/apply-migrations.mjs",
     "preview": "npm run preview -w @claim/web",
+    "test:streaming": "playwright test tests/streaming-smoke.spec.ts",
     "typecheck": "npm run typecheck -w @claim/web"
   },
   "dependencies": {
@@ -18,5 +19,8 @@
     "livekit-server-sdk": "^2.16.0",
     "postgres": "^3.4.9",
     "stripe": "^22.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
   }
 }
