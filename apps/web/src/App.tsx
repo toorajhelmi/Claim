@@ -208,6 +208,17 @@ type ClaimSettlement = {
   processed_at: string | null;
 };
 
+type UserPaymentMethod = {
+  id: string;
+  brand: string | null;
+  last4: string | null;
+  exp_month: number | null;
+  exp_year: number | null;
+  status: 'active' | 'failed' | 'deleted';
+  is_default: boolean;
+  failure_message: string | null;
+};
+
 type EmailSendResult = {
   sent?: number;
   skipped?: number;
@@ -2139,6 +2150,8 @@ function TermsPage() {
           <p>
             The minimum initial supporter pledge is the amount specified by the claimer for that claim.
             Once a supporter has already pledged at least that minimum, the same supporter may add any extra top-up amount.
+            Payment methods are collected by Stripe and kept for future pledges; Klaimd stores only safe metadata such as
+            brand, last four digits, and expiry.
           </p>
           <h2>Voting and final outcome</h2>
           <p>
@@ -3336,10 +3349,30 @@ function isAppealWindowOpen(result: ClaimResult | null) {
   return Date.now() <= new Date(appealDeadline).getTime();
 }
 
+function getDefaultPaymentMethod(paymentMethods: UserPaymentMethod[]) {
+  return paymentMethods.find((method) => method.status === 'active' && method.is_default)
+    ?? paymentMethods.find((method) => method.status === 'active')
+    ?? null;
+}
+
+function formatPaymentMethod(method: UserPaymentMethod) {
+  const brand = method.brand ? method.brand.toUpperCase() : 'Card';
+  const last4 = method.last4 ? `•••• ${method.last4}` : 'saved card';
+  const expiry = method.exp_month && method.exp_year
+    ? `exp ${String(method.exp_month).padStart(2, '0')}/${String(method.exp_year).slice(-2)}`
+    : 'expiry saved';
+
+  return `${brand} ${last4} · ${expiry}`;
+}
+
 function ClaimDetailPage({ slug }: { slug: string }) {
   const { data, loading, error, reload } = useClaimBundle(slug);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState('');
+  const [currentUserName, setCurrentUserName] = useState('');
+  const [paymentMethods, setPaymentMethods] = useState<UserPaymentMethod[]>([]);
+  const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(false);
+  const [paymentActionStatus, setPaymentActionStatus] = useState<'idle' | 'starting' | 'verifying' | 'deleting'>('idle');
   const [pledgeMessage, setPledgeMessage] = useState('');
   const [setupMessage, setSetupMessage] = useState('');
   const [activeTab, setActiveTab] = useState<ClaimDetailTabKey>(() => getClaimDetailTabFromSearch());
@@ -3355,12 +3388,55 @@ function ClaimDetailPage({ slug }: { slug: string }) {
   useEffect(() => {
     async function loadCurrentUser() {
       const { data: userData } = await supabase.auth.getUser();
-      setCurrentUserId(userData.user?.id ?? null);
-      setCurrentUserEmail(String(userData.user?.email ?? '').trim().toLowerCase());
+      const user = userData.user;
+      setCurrentUserId(user?.id ?? null);
+      setCurrentUserEmail(String(user?.email ?? '').trim().toLowerCase());
+
+      if (!user) {
+        setCurrentUserName('');
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name, handle, contact_email')
+        .eq('id', user.id)
+        .maybeSingle();
+      const profileData = profile as { display_name?: string | null; handle?: string | null; contact_email?: string | null } | null;
+      setCurrentUserName(
+        profileData?.display_name
+        || profileData?.handle
+        || String(user.user_metadata.display_name ?? '')
+        || String(user.email ?? '').split('@')[0]
+        || 'Supporter',
+      );
     }
 
     void loadCurrentUser();
   }, []);
+
+  async function loadPaymentMethods(userId = currentUserId) {
+    if (!userId) {
+      setPaymentMethods([]);
+      return;
+    }
+
+    setPaymentMethodsLoading(true);
+    const { data: methods } = await supabase
+      .from('user_payment_methods')
+      .select('id, brand, last4, exp_month, exp_year, status, is_default, failure_message')
+      .eq('user_id', userId)
+      .neq('status', 'deleted')
+      .order('is_default', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    setPaymentMethods((methods ?? []) as UserPaymentMethod[]);
+    setPaymentMethodsLoading(false);
+  }
+
+  useEffect(() => {
+    void loadPaymentMethods(currentUserId);
+  }, [currentUserId]);
 
   useEffect(() => {
     if (!data?.claim || data.claim.status !== 'draft') {
@@ -3392,7 +3468,45 @@ function ClaimDetailPage({ slug }: { slug: string }) {
 
       const params = new URLSearchParams(window.location.search);
       const checkoutStatus = params.get('checkout');
+      const paymentSetupStatus = params.get('payment_setup');
+      const setupSessionId = params.get('setup_session_id');
       const sessionId = params.get('session_id');
+
+      if (paymentSetupStatus === 'cancel') {
+        setActiveTab('backing');
+        setPledgeMessage('Payment method was not added. Add or update payment info before pledging.');
+        window.history.replaceState(null, '', getClaimDetailPath(data.claim, '?tab=backing'));
+        return;
+      }
+
+      if (paymentSetupStatus === 'success' && setupSessionId) {
+        setActiveTab('backing');
+        setPaymentActionStatus('verifying');
+        setPledgeMessage('Saving payment method...');
+        const { data: sessionData } = await supabase.auth.getSession();
+        const response = await fetch('/api/verify-payment-method', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(sessionData.session?.access_token ? { Authorization: `Bearer ${sessionData.session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ sessionId: setupSessionId }),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string; ok?: boolean } | null;
+
+        setPaymentActionStatus('idle');
+
+        if (!response.ok || !body?.ok) {
+          setPledgeMessage(body?.error ?? 'Payment method setup failed. Update payment info and retry.');
+          window.history.replaceState(null, '', getClaimDetailPath(data.claim, '?tab=backing'));
+          return;
+        }
+
+        setPledgeMessage('Payment method saved. You can now back this claim.');
+        window.history.replaceState(null, '', getClaimDetailPath(data.claim, '?tab=backing'));
+        await loadPaymentMethods();
+        return;
+      }
 
       if (checkoutStatus === 'cancel') {
         setDraftMode('activate');
@@ -3443,7 +3557,19 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     event.preventDefault();
     if (!data) return;
     const formData = new FormData(event.currentTarget);
-    const supporterEmail = normalizeEmail(String(formData.get('supporterEmail') || currentUserEmail || ''));
+    const supporterEmail = normalizeEmail(currentUserEmail);
+
+    if (!currentUserId || !supporterEmail) {
+      setPledgeMessage('Sign in before pledging so Klaimd can save your payment method for future claims.');
+      return;
+    }
+
+    const defaultPaymentMethod = getDefaultPaymentMethod(paymentMethods);
+
+    if (!defaultPaymentMethod) {
+      setPledgeMessage('Add a payment method before pledging. Klaimd will keep it for future pledge top-ups.');
+      return;
+    }
 
     if (data.claim.pledge_threshold_cents > 0 && !isValidEmail(supporterEmail)) {
       setPledgeMessage('Add a valid email so your pledge unlocks access to this paid claim.');
@@ -3460,8 +3586,8 @@ function ClaimDetailPage({ slug }: { slug: string }) {
 
     const { error: pledgeError } = await supabase.from('claim_pledges').insert({
       claim_id: data.claim.id,
-      supporter_name: String(formData.get('supporterName') || '').trim(),
-      supporter_handle: nullableString(formData.get('supporterHandle')),
+      supporter_name: currentUserName || supporterEmail.split('@')[0] || 'Supporter',
+      supporter_handle: null,
       supporter_email: supporterEmail || null,
       amount_cents: amountCents,
       source_channel: 'claim_page',
@@ -3478,6 +3604,62 @@ function ClaimDetailPage({ slug }: { slug: string }) {
       event.currentTarget.reset();
       await reload();
     }
+  }
+
+  async function handleStartPaymentMethodSetup() {
+    if (!data) return;
+
+    if (!currentUserId) {
+      window.location.href = `/auth?next=${encodeURIComponent(getClaimDetailPath(data.claim, '?tab=backing'))}`;
+      return;
+    }
+
+    setPaymentActionStatus('starting');
+    setPledgeMessage('Opening secure payment setup...');
+    const { data: sessionData } = await supabase.auth.getSession();
+    const response = await fetch('/api/create-payment-method-checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sessionData.session?.access_token ? { Authorization: `Bearer ${sessionData.session.access_token}` } : {}),
+      },
+      body: JSON.stringify({
+        returnPath: getClaimDetailPath(data.claim, '?tab=backing'),
+      }),
+    });
+    const body = (await response.json().catch(() => null)) as { error?: string; url?: string } | null;
+    setPaymentActionStatus('idle');
+
+    if (!response.ok || !body?.url) {
+      setPledgeMessage(body?.error ?? 'Could not open payment setup. Please retry.');
+      return;
+    }
+
+    window.location.href = body.url;
+  }
+
+  async function handleDeletePaymentMethod(paymentMethodId: string) {
+    setPaymentActionStatus('deleting');
+    setPledgeMessage('Deleting payment method...');
+    const { data: sessionData } = await supabase.auth.getSession();
+    const response = await fetch('/api/delete-payment-method', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sessionData.session?.access_token ? { Authorization: `Bearer ${sessionData.session.access_token}` } : {}),
+      },
+      body: JSON.stringify({ paymentMethodId }),
+    });
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    setPaymentActionStatus('idle');
+
+    if (!response.ok) {
+      setPledgeMessage(body?.error ?? 'Could not delete payment method. Update payment info and retry.');
+      return;
+    }
+
+    setPledgeMessage('Payment method deleted. Add a new one before pledging again.');
+    await loadPaymentMethods();
   }
 
   async function handleInviteSupporters(event: FormEvent<HTMLFormElement>) {
@@ -3895,6 +4077,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
   const isOwner = currentUserId === data.claim.creator_id;
   const minimumNextPledgeCents = getMinimumNextPledgeCents(data.claim, data.pledges, currentUserEmail);
   const currentSupporterPledgeTotal = getSupporterPledgeTotal(data.pledges, currentUserEmail);
+  const defaultPaymentMethod = getDefaultPaymentMethod(paymentMethods);
   const canEarlyCancel =
     isOwner &&
     !['live', 'under_review', 'verified', 'not_proven', 'cancelled', 'disputed'].includes(data.claim.status) &&
@@ -4413,15 +4596,66 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                         ? ` You already pledged ${formatMoney(currentSupporterPledgeTotal)}, so any extra top-up is allowed.`
                         : ` Your next pledge must be at least ${formatMoney(minimumNextPledgeCents)}.`}
                     </p>
-                    <FormField label="Name" name="supporterName" required placeholder="Supporter name" />
-                    <FormField
-                      label={data.claim.pledge_threshold_cents > 0 ? 'Email for access' : 'Email for live reminder'}
-                      name="supporterEmail"
-                      type="email"
-                      defaultValue={currentUserEmail}
-                      placeholder={data.claim.pledge_threshold_cents > 0 ? 'required for paid access' : 'optional'}
-                      required={data.claim.pledge_threshold_cents > 0}
-                    />
+                    <div className="payment-method-card">
+                      <div>
+                        <p className="eyebrow">Supporter account</p>
+                        {currentUserId ? (
+                          <strong>{currentUserName || currentUserEmail}</strong>
+                        ) : (
+                          <strong>Sign in to pledge</strong>
+                        )}
+                        <span>
+                          {currentUserId
+                            ? currentUserEmail
+                            : 'Klaimd uses your account for supporter identity and future payment methods.'}
+                        </span>
+                      </div>
+                      {!currentUserId ? (
+                        <a className="button button-ghost" href={`/auth?next=${encodeURIComponent(getClaimDetailPath(data.claim, '?tab=backing'))}`}>
+                          Sign in
+                        </a>
+                      ) : null}
+                    </div>
+                    <div className="payment-method-card">
+                      <div>
+                        <p className="eyebrow">Payment method</p>
+                        {paymentMethodsLoading ? (
+                          <strong>Checking payment info...</strong>
+                        ) : defaultPaymentMethod ? (
+                          <>
+                            <strong>{formatPaymentMethod(defaultPaymentMethod)}</strong>
+                            <span>Saved for this and future pledge top-ups.</span>
+                          </>
+                        ) : (
+                          <>
+                            <strong>No payment method saved</strong>
+                            <span>Add a card once, then use it for future pledges.</span>
+                          </>
+                        )}
+                      </div>
+                      {currentUserId ? (
+                        <div className="payment-method-actions">
+                          <button
+                            className="button button-ghost"
+                            type="button"
+                            onClick={() => void handleStartPaymentMethodSetup()}
+                            disabled={paymentActionStatus === 'starting' || paymentActionStatus === 'verifying'}
+                          >
+                            {defaultPaymentMethod ? 'Update payment info' : 'Add payment method'}
+                          </button>
+                          {defaultPaymentMethod ? (
+                            <button
+                              className="button button-ghost button-danger"
+                              type="button"
+                              onClick={() => void handleDeletePaymentMethod(defaultPaymentMethod.id)}
+                              disabled={paymentActionStatus === 'deleting'}
+                            >
+                              Delete
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
                     <FormField
                       label="Pledge amount ($)"
                       name="amount"
@@ -4430,14 +4664,19 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                       min={String(minimumNextPledgeCents / 100)}
                       step="1"
                     />
-                    <label className="checkbox-row">
+                    <label className="donation-option">
                       <input name="wantsDonate" type="checkbox" />
-                      <span>If this claim is declined, donate my supporter distribution instead of receiving it.</span>
+                      <span>
+                        <strong>Donate if declined</strong>
+                        <small>If this claim is declined, donate my supporter distribution instead of receiving it.</small>
+                      </span>
                     </label>
                     <p className="terms-note">
                       By pledging, you agree to the <a href="/terms">payment, voting, appeal, and reimbursement terms</a>.
                     </p>
-                    <button className="button button-primary" type="submit">Back this claim</button>
+                    <button className="button button-primary" type="submit" disabled={!currentUserId || !defaultPaymentMethod}>
+                      {defaultPaymentMethod ? 'Back this claim' : 'Add payment method first'}
+                    </button>
                   </form>
                 )}
                 {pledgeMessage ? <p className="form-message">{pledgeMessage}</p> : null}
