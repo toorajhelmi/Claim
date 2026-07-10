@@ -139,10 +139,73 @@ type ProofRule = {
 
 type Pledge = {
   id: string;
+  claim_id: string;
+  supporter_email: string | null;
   supporter_name: string;
   supporter_handle: string | null;
   amount_cents: number;
+  status: string;
+  wants_donate: boolean;
   created_at: string;
+};
+
+type ClaimVote = {
+  id: string;
+  claim_id: string;
+  voter_email: string;
+  vote: 'accepted' | 'declined';
+  reason: string | null;
+  created_at: string;
+};
+
+type ClaimAppeal = {
+  id: string;
+  claim_id: string;
+  appellant_email: string;
+  appellant_role: 'claimer' | 'supporter';
+  reason: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn';
+  admin_response: string | null;
+  created_at: string;
+  resolved_at: string | null;
+};
+
+type ClaimResult = {
+  id: string;
+  claim_id: string;
+  status: 'verified' | 'not_proven' | 'disputed' | 'cancelled';
+  reviewer_name: string | null;
+  summary: string;
+  published_at: string;
+  outcome_source: 'admin' | 'vote' | 'appeal_admin';
+  vote_deadline_at: string | null;
+  appeal_deadline_at: string | null;
+  settlement_ready_at: string | null;
+  admin_notes: string | null;
+};
+
+type ClaimAdminDecision = {
+  id: string;
+  claim_id: string;
+  decision: 'accepted' | 'declined' | 'cancelled';
+  summary: string;
+  created_at: string;
+};
+
+type ClaimSettlement = {
+  id: string;
+  claim_id: string;
+  outcome: 'accepted' | 'declined' | 'cancelled';
+  status: 'pending' | 'blocked_by_appeal' | 'ready' | 'processed';
+  platform_commission_bps: number;
+  gross_pledge_cents: number;
+  net_pledge_cents: number;
+  locked_amount_cents: number;
+  net_locked_amount_cents: number;
+  donation_cents: number;
+  notes: string | null;
+  ready_at: string | null;
+  processed_at: string | null;
 };
 
 type EmailSendResult = {
@@ -211,6 +274,11 @@ type ClaimBundle = {
   proofEvents: ProofEvent[];
   checkins: Checkin[];
   liveRoom: LiveRoomRecord | null;
+  votes: ClaimVote[];
+  appeals: ClaimAppeal[];
+  result: ClaimResult | null;
+  adminDecisions: ClaimAdminDecision[];
+  settlement: ClaimSettlement | null;
 };
 
 type ClaimDetailTabKey = 'overview' | 'backing' | 'proof' | 'live';
@@ -438,6 +506,14 @@ export function App() {
 
   if (route.name === 'recorder-invite') {
     return <RecorderInvitePage token={route.token} />;
+  }
+
+  if (route.name === 'admin') {
+    return <AdminPage />;
+  }
+
+  if (route.name === 'terms') {
+    return <TermsPage />;
   }
 
   if (route.name === 'unified-app') {
@@ -1611,7 +1687,9 @@ function getRoute(pathname: string):
   | { name: 'claim-detail'; slug: string }
   | { name: 'claim-live'; slug: string }
   | { name: 'claim-result'; slug: string }
-  | { name: 'recorder-invite'; token: string } {
+  | { name: 'recorder-invite'; token: string }
+  | { name: 'admin' }
+  | { name: 'terms' } {
   const parts = pathname.split('/').filter(Boolean);
 
   if (parts[0] === 'auth') {
@@ -1649,6 +1727,14 @@ function getRoute(pathname: string):
 
   if (parts[0] === 'recording') {
     return { name: 'unified-app', tab: 'recording' };
+  }
+
+  if (parts[0] === 'admin') {
+    return { name: 'admin' };
+  }
+
+  if (parts[0] === 'terms') {
+    return { name: 'terms' };
   }
 
   if (parts[0] === 'supporting') {
@@ -1720,6 +1806,8 @@ function AppChrome({ children, immersive = false }: { children: ReactNode; immer
             {isCreatePage ? null : <a href="/claims/new">Create claim</a>}
             <a href="/support">Support a claim</a>
             <a href="/#how-it-works">How it works</a>
+            <a href="/terms">Payment terms</a>
+            <a href="/admin">Admin</a>
             {isSignedIn ? (
               <button type="button" onClick={() => void handleSignOut()}>
                 Sign out
@@ -2036,6 +2124,223 @@ function AuthCallbackPage({ nextPath }: { nextPath: string }) {
   }, [safeNextPath]);
 
   return <LoadingPage label={message} />;
+}
+
+function TermsPage() {
+  return (
+    <AppChrome>
+      <main className="app-page section-shell">
+        <section className="dashboard-hero">
+          <p className="eyebrow">Payment terms</p>
+          <h1 className="page-title">Pledges, voting, appeals, and reimbursements.</h1>
+        </section>
+        <section className="mvp-panel terms-panel">
+          <h2>Pledging</h2>
+          <p>
+            The minimum initial supporter pledge is the amount specified by the claimer for that claim.
+            Once a supporter has already pledged at least that minimum, the same supporter may add any extra top-up amount.
+          </p>
+          <h2>Voting and final outcome</h2>
+          <p>
+            After the event ends and the due date has passed, pledged supporters have 24 hours to vote accepted or declined.
+            A direction needs 75% or more of supporters, rounded up. During stabilization, admin review still determines
+            the final outcome regardless of the supporter vote.
+          </p>
+          <h2>Appeals</h2>
+          <p>
+            The claimer and each pledged supporter may appeal once per claim within 24 hours after an outcome is announced.
+            If an admin changes the outcome after an appeal, the 24-hour appeal and settlement window resets.
+          </p>
+          <h2>Reimbursements and payout rules</h2>
+          <ul>
+            <li>If accepted, pledged funds minus platform commission are paid to the claimer or donated once donation flow exists.</li>
+            <li>If declined, the locked amount minus platform commission is distributed among supporters who did not choose donation.</li>
+            <li>If cancelled before the pledge pool reaches the locked amount minus commission, the claimer gets the full locked amount back and supporters receive their full pledges back. No platform commission is charged.</li>
+          </ul>
+          <p className="terms-note">
+            Payment provider transfers, donations, refunds, and account termination are currently represented as admin ledger actions until the production payout provider flow is enabled.
+          </p>
+        </section>
+      </main>
+    </AppChrome>
+  );
+}
+
+function AdminPage() {
+  const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const [pledges, setPledges] = useState<Pledge[]>([]);
+  const [votes, setVotes] = useState<ClaimVote[]>([]);
+  const [appeals, setAppeals] = useState<ClaimAppeal[]>([]);
+  const [results, setResults] = useState<ClaimResult[]>([]);
+  const [settlements, setSettlements] = useState<ClaimSettlement[]>([]);
+  const [message, setMessage] = useState('');
+
+  async function loadAdminData() {
+    setLoading(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const currentUser = userData.user;
+
+    if (!currentUser) {
+      setIsAdmin(false);
+      setLoading(false);
+      return;
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('platform_role')
+      .eq('id', currentUser.id)
+      .maybeSingle();
+
+    if ((profile as { platform_role?: string } | null)?.platform_role !== 'admin') {
+      setIsAdmin(false);
+      setLoading(false);
+      return;
+    }
+
+    setIsAdmin(true);
+    const [claimRows, pledgeRows, voteRows, appealRows, resultRows, settlementRows] = await Promise.all([
+      supabase.from('claims').select('*').order('created_at', { ascending: false }).limit(80),
+      supabase.from('claim_pledges').select('id, claim_id, supporter_name, supporter_handle, supporter_email, amount_cents, status, wants_donate, created_at').order('created_at', { ascending: false }).limit(200),
+      supabase.from('claim_votes').select('*').order('created_at', { ascending: false }).limit(200),
+      supabase.from('claim_appeals').select('*').order('created_at', { ascending: false }).limit(200),
+      supabase.from('claim_results').select('*').order('published_at', { ascending: false }).limit(120),
+      supabase.from('claim_settlements').select('*').order('created_at', { ascending: false }).limit(120),
+    ]);
+
+    setClaims((claimRows.data ?? []) as Claim[]);
+    setPledges((pledgeRows.data ?? []) as Pledge[]);
+    setVotes((voteRows.data ?? []) as ClaimVote[]);
+    setAppeals((appealRows.data ?? []) as ClaimAppeal[]);
+    setResults((resultRows.data ?? []) as ClaimResult[]);
+    setSettlements((settlementRows.data ?? []) as ClaimSettlement[]);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    void loadAdminData();
+  }, []);
+
+  async function submitAdminOutcome(event: FormEvent<HTMLFormElement>, claimId: string) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const response = await fetch('/api/admin-outcome', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sessionData.session?.access_token ? { Authorization: `Bearer ${sessionData.session.access_token}` } : {}),
+      },
+      body: JSON.stringify({
+        claimId,
+        decision: String(formData.get('decision') || ''),
+        platformCommissionBps: Math.round(Number(formData.get('platformCommissionPercent') || 7.5) * 100),
+        summary: String(formData.get('summary') || '').trim(),
+      }),
+    });
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+
+    if (!response.ok) {
+      setMessage(body?.error ?? 'Could not save admin outcome.');
+      return;
+    }
+
+    setMessage('Admin outcome saved. Appeal and settlement windows were reset.');
+    event.currentTarget.reset();
+    await loadAdminData();
+  }
+
+  if (loading) return <LoadingPage label="Loading admin..." />;
+
+  if (!isAdmin) {
+    return <ErrorPage message="Admin access is required." />;
+  }
+
+  const pendingAppeals = appeals.filter((appeal) => appeal.status === 'pending');
+
+  return (
+    <AppChrome>
+      <main className="app-page section-shell admin-page">
+        <section className="dashboard-hero">
+          <p className="eyebrow">Admin</p>
+          <h1 className="page-title">Operations panel.</h1>
+          <p className="page-lede">Review claims, pledges, votes, appeals, and outcome settlement state.</p>
+        </section>
+        {message ? <p className="form-message">{message}</p> : null}
+        <section className="profile-stat-grid">
+          <Metric label="Claims" value={String(claims.length)} />
+          <Metric label="Pledges" value={String(pledges.length)} />
+          <Metric label="Pending appeals" value={String(pendingAppeals.length)} />
+          <Metric label="Settlements" value={String(settlements.length)} />
+        </section>
+        <section className="mvp-panel">
+          <p className="eyebrow">Claims</p>
+          <div className="admin-claim-list">
+            {claims.map((claim) => {
+              const claimVotes = votes.filter((vote) => vote.claim_id === claim.id);
+              const claimPledges = pledges.filter((pledge) => pledge.claim_id === claim.id);
+              const voteSummary = getVoteSummary(claimVotes, getDistinctSupporterCount(claimPledges));
+              const result = results.find((item) => item.claim_id === claim.id);
+              const settlement = settlements.find((item) => item.claim_id === claim.id);
+
+              return (
+                <article className="admin-claim-card" key={claim.id}>
+                  <div>
+                    <p className="eyebrow">{claim.status.replace(/_/g, ' ')}</p>
+                    <h2>{claim.title}</h2>
+                    <p>{formatMoney(claim.pledge_pool_cents)} pledged / locked {formatMoney(claim.stake_amount_cents)}</p>
+                    <p className="terms-note">
+                      Vote signal: accepted {voteSummary.accepted}, declined {voteSummary.declined}, threshold {voteSummary.threshold}.
+                      {result ? ` Last outcome: ${result.status}.` : ' No outcome yet.'}
+                      {settlement ? ` Settlement: ${settlement.status}.` : ''}
+                    </p>
+                  </div>
+                  <form className="compact-form admin-outcome-form" onSubmit={(event) => void submitAdminOutcome(event, claim.id)}>
+                    <label>
+                      Outcome
+                      <select name="decision" required defaultValue="">
+                        <option value="" disabled>Select outcome</option>
+                        <option value="accepted">Accepted</option>
+                        <option value="declined">Declined</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    </label>
+                    <FormField label="Platform commission %" name="platformCommissionPercent" type="number" defaultValue="7.5" min="0" step="0.1" />
+                    <label>
+                      Admin summary
+                      <textarea name="summary" rows={3} required placeholder="Explain the final outcome and any appeal response." />
+                    </label>
+                    <button className="button button-primary" type="submit">Save final outcome</button>
+                  </form>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+        <section className="mvp-panel">
+          <p className="eyebrow">Appeals</p>
+          <div className="mini-list">
+            {appeals.length === 0 ? <p>No appeals yet.</p> : null}
+            {appeals.map((appeal) => (
+              <div key={appeal.id}>
+                <strong>{appeal.status} · {appeal.appellant_role}</strong>
+                <span>{appeal.reason}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+        <section className="mvp-panel">
+          <p className="eyebrow">Refunds, reimbursements, and account actions</p>
+          <p>
+            Settlement rows show what should be paid, refunded, donated, or held after appeal windows close.
+            Provider transfers/refunds and account termination are intentionally ledger/admin actions until production payment rails are enabled.
+          </p>
+        </section>
+      </main>
+    </AppChrome>
+  );
 }
 
 type ClaimWizardValues = {
@@ -2782,24 +3087,36 @@ function ClaimWizardReview({ values }: { values: ClaimWizardValues }) {
 }
 
 function FormField({
+  min,
   label,
   name,
   required,
   placeholder,
+  step,
   type = 'text',
   defaultValue,
 }: {
   label: string;
+  min?: string;
   name: string;
   required?: boolean;
   placeholder?: string;
+  step?: string;
   type?: string;
   defaultValue?: string;
 }) {
   return (
     <label>
       {label}
-      <input name={name} required={required} placeholder={placeholder} type={type} defaultValue={defaultValue} />
+      <input
+        name={name}
+        required={required}
+        placeholder={placeholder}
+        type={type}
+        defaultValue={defaultValue}
+        min={min}
+        step={step}
+      />
     </label>
   );
 }
@@ -2949,6 +3266,76 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+function addHoursIso(value: string | null | undefined, hours: number) {
+  const base = value ? new Date(value) : new Date();
+  return new Date(base.getTime() + hours * 60 * 60 * 1000).toISOString();
+}
+
+function getPledgeEmail(pledge: Pick<Pledge, 'supporter_email'>) {
+  return normalizeEmail(pledge.supporter_email);
+}
+
+function getSupporterPledgeTotal(pledges: Pledge[], supporterEmail: string) {
+  const normalizedEmail = normalizeEmail(supporterEmail);
+
+  if (!normalizedEmail) return 0;
+
+  return pledges
+    .filter((pledge) => getPledgeEmail(pledge) === normalizedEmail && ['intent', 'authorized', 'collected'].includes(pledge.status))
+    .reduce((total, pledge) => total + pledge.amount_cents, 0);
+}
+
+function getMinimumNextPledgeCents(claim: Claim, pledges: Pledge[], supporterEmail: string) {
+  const previousTotal = getSupporterPledgeTotal(pledges, supporterEmail);
+
+  if (claim.pledge_threshold_cents <= 0 || previousTotal >= claim.pledge_threshold_cents) {
+    return 100;
+  }
+
+  return claim.pledge_threshold_cents;
+}
+
+function getDistinctSupporterCount(pledges: Pledge[]) {
+  return new Set(
+    pledges
+      .map((pledge) => getPledgeEmail(pledge))
+      .filter(Boolean),
+  ).size;
+}
+
+function getVoteThreshold(totalSupporters: number) {
+  return Math.ceil(totalSupporters * 0.75);
+}
+
+function getVoteSummary(votes: ClaimVote[], totalSupporters: number) {
+  const accepted = votes.filter((vote) => vote.vote === 'accepted').length;
+  const declined = votes.filter((vote) => vote.vote === 'declined').length;
+  const threshold = getVoteThreshold(totalSupporters);
+  const direction = accepted >= threshold
+    ? 'accepted'
+    : declined >= threshold
+      ? 'declined'
+      : null;
+
+  return { accepted, declined, direction, threshold };
+}
+
+function getVotingWindow(claim: Claim, liveRoom: LiveRoomRecord | null) {
+  const start = claim.deadline_at ?? liveRoom?.closed_at ?? null;
+  const end = addHoursIso(start, 24);
+  const now = Date.now();
+  const hasStarted = claim.status === 'under_review' && (!start || now >= new Date(start).getTime());
+  const isOpen = hasStarted && now <= new Date(end).getTime();
+
+  return { end, isOpen, start };
+}
+
+function isAppealWindowOpen(result: ClaimResult | null) {
+  if (!result) return false;
+  const appealDeadline = result.appeal_deadline_at ?? addHoursIso(result.published_at, 24);
+  return Date.now() <= new Date(appealDeadline).getTime();
+}
+
 function ClaimDetailPage({ slug }: { slug: string }) {
   const { data, loading, error, reload } = useClaimBundle(slug);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -3063,13 +3450,22 @@ function ClaimDetailPage({ slug }: { slug: string }) {
       return;
     }
 
+    const amountCents = dollarsToCents(formData.get('amount'));
+    const minimumNextPledgeCents = getMinimumNextPledgeCents(data.claim, data.pledges, supporterEmail);
+
+    if (amountCents < minimumNextPledgeCents) {
+      setPledgeMessage(`Minimum pledge is ${formatMoney(minimumNextPledgeCents)} for this supporter.`);
+      return;
+    }
+
     const { error: pledgeError } = await supabase.from('claim_pledges').insert({
       claim_id: data.claim.id,
       supporter_name: String(formData.get('supporterName') || '').trim(),
       supporter_handle: nullableString(formData.get('supporterHandle')),
       supporter_email: supporterEmail || null,
-      amount_cents: dollarsToCents(formData.get('amount')),
+      amount_cents: amountCents,
       source_channel: 'claim_page',
+      wants_donate: formData.get('wantsDonate') === 'on',
     });
     setPledgeMessage(
       pledgeError
@@ -3123,6 +3519,34 @@ function ClaimDetailPage({ slug }: { slug: string }) {
         : `Sent ${sent} supporter invite${sent === 1 ? '' : 's'}.`,
     );
     event.currentTarget.reset();
+  }
+
+  async function handleCancelClaim() {
+    if (!data) return;
+    const confirmed = window.confirm('Cancel this claim under the early cancellation rule? Supporters and locked funds will be marked for full refund with no platform commission.');
+
+    if (!confirmed) {
+      return;
+    }
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const response = await fetch('/api/cancel-claim', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sessionData.session?.access_token ? { Authorization: `Bearer ${sessionData.session.access_token}` } : {}),
+      },
+      body: JSON.stringify({ claimId: data.claim.id }),
+    });
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+
+    if (!response.ok) {
+      setPledgeMessage(body?.error ?? 'Could not cancel this claim.');
+      return;
+    }
+
+    setPledgeMessage('Claim cancelled. Refund ledger is ready with no platform commission.');
+    await reload();
   }
 
   function setDraftReviewMode(nextMode: 'review' | 'activate' | 'edit') {
@@ -3469,6 +3893,12 @@ function ClaimDetailPage({ slug }: { slug: string }) {
 
   const isDraft = data.claim.status === 'draft';
   const isOwner = currentUserId === data.claim.creator_id;
+  const minimumNextPledgeCents = getMinimumNextPledgeCents(data.claim, data.pledges, currentUserEmail);
+  const currentSupporterPledgeTotal = getSupporterPledgeTotal(data.pledges, currentUserEmail);
+  const canEarlyCancel =
+    isOwner &&
+    !['live', 'under_review', 'verified', 'not_proven', 'cancelled', 'disputed'].includes(data.claim.status) &&
+    data.claim.pledge_pool_cents < Math.floor(data.claim.stake_amount_cents * 0.925);
   const recorderSuggestion = inferRecorderSetup(data.claim, data.proofRules);
   const claimDetailPath = getClaimDetailPath(data.claim);
   const claimLivePath = getClaimLivePath(data.claim);
@@ -3774,6 +4204,9 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                     Platform fees can vary from 5% to 10% of pledged or locked funds depending on the outcome rules.
                     The exact fee depends on the pledge amount, locked amount, and final verification result.
                   </p>
+                  <p className="terms-note">
+                    See the <a href="/terms">payment, voting, appeal, and reimbursement terms</a>.
+                  </p>
                 </div>
                 <div className="action-row">
                   <button
@@ -3933,6 +4366,14 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                   <a className="button button-primary" href={claimLivePath}>Open live room</a>
                   <a className="button button-ghost" href={claimResultPath}>View result</a>
                 </div>
+                {canEarlyCancel ? (
+                  <button className="button button-ghost button-danger" type="button" onClick={() => void handleCancelClaim()}>
+                    Cancel and unlock refunds
+                  </button>
+                ) : null}
+                <p className="terms-note">
+                  Cancellation and reimbursement follow the <a href="/terms">payment terms</a>.
+                </p>
               </aside>
             </div>
           </section>
@@ -3966,6 +4407,12 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                   </form>
                 ) : (
                   <form className="compact-form" onSubmit={handlePledge}>
+                    <p className="form-message">
+                      Minimum pledge for this claim is {formatMoney(data.claim.pledge_threshold_cents)}.
+                      {currentSupporterPledgeTotal >= data.claim.pledge_threshold_cents && data.claim.pledge_threshold_cents > 0
+                        ? ` You already pledged ${formatMoney(currentSupporterPledgeTotal)}, so any extra top-up is allowed.`
+                        : ` Your next pledge must be at least ${formatMoney(minimumNextPledgeCents)}.`}
+                    </p>
                     <FormField label="Name" name="supporterName" required placeholder="Supporter name" />
                     <FormField
                       label={data.claim.pledge_threshold_cents > 0 ? 'Email for access' : 'Email for live reminder'}
@@ -3975,7 +4422,21 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                       placeholder={data.claim.pledge_threshold_cents > 0 ? 'required for paid access' : 'optional'}
                       required={data.claim.pledge_threshold_cents > 0}
                     />
-                    <FormField label="Pledge amount ($)" name="amount" type="number" defaultValue="25" />
+                    <FormField
+                      label="Pledge amount ($)"
+                      name="amount"
+                      type="number"
+                      defaultValue={String(minimumNextPledgeCents / 100)}
+                      min={String(minimumNextPledgeCents / 100)}
+                      step="1"
+                    />
+                    <label className="checkbox-row">
+                      <input name="wantsDonate" type="checkbox" />
+                      <span>If this claim is declined, donate my supporter distribution instead of receiving it.</span>
+                    </label>
+                    <p className="terms-note">
+                      By pledging, you agree to the <a href="/terms">payment, voting, appeal, and reimbursement terms</a>.
+                    </p>
                     <button className="button button-primary" type="submit">Back this claim</button>
                   </form>
                 )}
@@ -4300,9 +4761,22 @@ function ClaimLivePage({ slug }: { slug: string }) {
 }
 
 function ClaimResultPage({ slug }: { slug: string }) {
-  const { data, loading, error } = useClaimBundle(slug);
+  const { data, loading, error, reload } = useClaimBundle(slug);
   const [claimAccess, setClaimAccess] = useState<ClaimAccess | null>(null);
   const [claimAccessLoading, setClaimAccessLoading] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
+  const [outcomeMessage, setOutcomeMessage] = useState('');
+
+  useEffect(() => {
+    async function loadCurrentUser() {
+      const { data: userData } = await supabase.auth.getUser();
+      setCurrentUserId(userData.user?.id ?? null);
+      setCurrentUserEmail(normalizeEmail(userData.user?.email));
+    }
+
+    void loadCurrentUser();
+  }, []);
 
   useEffect(() => {
     if (!data?.claim) {
@@ -4365,6 +4839,56 @@ function ClaimResultPage({ slug }: { slug: string }) {
   if (error || !data) return <ErrorPage message={error ?? 'Claim not found.'} />;
 
   const requiresSatisfiedOutcomeGate = data.claim.status === 'verified' && data.claim.pledge_threshold_cents > 0;
+  const isOwner = currentUserId === data.claim.creator_id;
+  const isSupporter = getSupporterPledgeTotal(data.pledges, currentUserEmail) > 0;
+
+  async function handleVote(vote: 'accepted' | 'declined', reason: string) {
+    if (!data || !currentUserEmail) return;
+    const { error: voteError } = await supabase.from('claim_votes').insert({
+      claim_id: data.claim.id,
+      reason: nullableString(reason),
+      vote,
+      voter_email: currentUserEmail,
+      voter_id: currentUserId,
+    });
+
+    if (voteError) {
+      setOutcomeMessage(voteError.message);
+      return;
+    }
+
+    setOutcomeMessage('Vote saved. Admin finalization is still required during stabilization.');
+    await reload();
+  }
+
+  async function handleAppeal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!data || !currentUserEmail) return;
+    const formData = new FormData(event.currentTarget);
+    const reason = String(formData.get('appealReason') || '').trim();
+
+    if (!reason) {
+      setOutcomeMessage('Add an appeal reason.');
+      return;
+    }
+
+    const { error: appealError } = await supabase.from('claim_appeals').insert({
+      appellant_email: currentUserEmail,
+      appellant_id: currentUserId,
+      appellant_role: isOwner ? 'claimer' : 'supporter',
+      claim_id: data.claim.id,
+      reason,
+    });
+
+    if (appealError) {
+      setOutcomeMessage(appealError.message);
+      return;
+    }
+
+    setOutcomeMessage('Appeal submitted. An admin must review it before settlement can proceed.');
+    event.currentTarget.reset();
+    await reload();
+  }
 
   if (requiresSatisfiedOutcomeGate && (claimAccessLoading || !claimAccess)) {
     return <LoadingPage label="Checking pledge access..." />;
@@ -4409,6 +4933,24 @@ function ClaimResultPage({ slug }: { slug: string }) {
             the live room.
           </p>
         </section>
+        <OutcomeVotingPanel
+          claim={data.claim}
+          currentUserEmail={currentUserEmail}
+          isSupporter={isSupporter}
+          liveRoom={data.liveRoom}
+          onVote={handleVote}
+          pledges={data.pledges}
+          votes={data.votes}
+        />
+        <AppealPanel
+          appeals={data.appeals}
+          currentUserEmail={currentUserEmail}
+          isEligible={isOwner || isSupporter}
+          onAppeal={handleAppeal}
+          result={data.result}
+          settlement={data.settlement}
+        />
+        {outcomeMessage ? <p className="form-message">{outcomeMessage}</p> : null}
         <section className="mvp-panel replay-panel">
           <p className="eyebrow">Replay</p>
           <h2>Recorded event.</h2>
@@ -4434,6 +4976,142 @@ function ClaimResultPage({ slug }: { slug: string }) {
         <Timeline events={data.proofEvents} checkins={data.checkins} />
       </main>
     </AppChrome>
+  );
+}
+
+function OutcomeVotingPanel({
+  claim,
+  currentUserEmail,
+  isSupporter,
+  liveRoom,
+  onVote,
+  pledges,
+  votes,
+}: {
+  claim: Claim;
+  currentUserEmail: string;
+  isSupporter: boolean;
+  liveRoom: LiveRoomRecord | null;
+  onVote: (vote: 'accepted' | 'declined', reason: string) => Promise<void>;
+  pledges: Pledge[];
+  votes: ClaimVote[];
+}) {
+  const [voteReason, setVoteReason] = useState('');
+  const votingWindow = getVotingWindow(claim, liveRoom);
+  const supporterCount = getDistinctSupporterCount(pledges);
+  const voteSummary = getVoteSummary(votes, supporterCount);
+  const alreadyVoted = votes.some((vote) => normalizeEmail(vote.voter_email) === currentUserEmail);
+
+  async function submitVote(vote: 'accepted' | 'declined') {
+    await onVote(vote, voteReason);
+    setVoteReason('');
+  }
+
+  return (
+    <section className="mvp-panel outcome-panel">
+      <p className="eyebrow">Supporter vote</p>
+      <h2>24-hour supporter signal.</h2>
+      <p>
+        Voting opens after the event is ended and the due date has passed. A direction needs
+        {` ${voteSummary.threshold || 0} of ${supporterCount} supporter vote${supporterCount === 1 ? '' : 's'} `}
+        (75%, rounded up). During stabilization, an admin still determines the final outcome regardless of the vote.
+      </p>
+      <div className="profile-stat-grid">
+        <Metric label="Accepted votes" value={String(voteSummary.accepted)} />
+        <Metric label="Declined votes" value={String(voteSummary.declined)} />
+        <Metric label="Vote deadline" value={formatDateTime(votingWindow.end)} />
+      </div>
+      {voteSummary.direction ? (
+        <p className="form-message">Supporter signal currently points to {voteSummary.direction}.</p>
+      ) : (
+        <p className="form-message">No 75% supporter direction yet. Admin outcome is required.</p>
+      )}
+      {votingWindow.isOpen && isSupporter && !alreadyVoted ? (
+        <div className="compact-form">
+          <label>
+            Optional vote reason
+            <textarea value={voteReason} rows={3} onChange={(event) => setVoteReason(event.target.value)} />
+          </label>
+          <div className="action-row">
+            <button className="button button-primary" type="button" onClick={() => void submitVote('accepted')}>
+              Vote accepted
+            </button>
+            <button className="button button-ghost" type="button" onClick={() => void submitVote('declined')}>
+              Vote declined
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="terms-note">
+          {alreadyVoted
+            ? 'You already voted on this claim.'
+            : isSupporter
+              ? 'Voting is not currently open.'
+              : 'Only pledged supporters can vote.'}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function AppealPanel({
+  appeals,
+  currentUserEmail,
+  isEligible,
+  onAppeal,
+  result,
+  settlement,
+}: {
+  appeals: ClaimAppeal[];
+  currentUserEmail: string;
+  isEligible: boolean;
+  onAppeal: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  result: ClaimResult | null;
+  settlement: ClaimSettlement | null;
+}) {
+  const alreadyAppealed = appeals.some((appeal) => normalizeEmail(appeal.appellant_email) === currentUserEmail);
+  const hasPendingAppeal = appeals.some((appeal) => appeal.status === 'pending');
+  const appealOpen = isAppealWindowOpen(result);
+
+  return (
+    <section className="mvp-panel outcome-panel">
+      <p className="eyebrow">Appeals and settlement</p>
+      <h2>Outcome lock window.</h2>
+      {result ? (
+        <p>
+          Outcome announced {formatDateTime(result.published_at)}. Claimer and supporters have until{' '}
+          {formatDateTime(result.appeal_deadline_at ?? addHoursIso(result.published_at, 24))} to appeal once.
+          Each admin outcome change resets this 24-hour window.
+        </p>
+      ) : (
+        <p>Final outcome has not been announced yet.</p>
+      )}
+      {settlement ? (
+        <div className="profile-stat-grid">
+          <Metric label="Settlement status" value={settlement.status.replace(/_/g, ' ')} />
+          <Metric label="Net pledges" value={formatMoney(settlement.net_pledge_cents)} />
+          <Metric label="Net locked amount" value={formatMoney(settlement.net_locked_amount_cents)} />
+        </div>
+      ) : null}
+      {hasPendingAppeal ? <p className="form-message">A pending appeal blocks settlement.</p> : null}
+      {result && appealOpen && isEligible && !alreadyAppealed ? (
+        <form className="compact-form" onSubmit={(event) => void onAppeal(event)}>
+          <label>
+            Appeal reason
+            <textarea name="appealReason" rows={4} required placeholder="Explain why the outcome should be reviewed again." />
+          </label>
+          <button className="button button-primary" type="submit">Submit one-time appeal</button>
+        </form>
+      ) : (
+        <p className="terms-note">
+          {alreadyAppealed
+            ? 'You already appealed this claim.'
+            : result && !appealOpen
+              ? 'Appeal window is closed.'
+              : 'Appeals open after admin outcome announcement for claimers and pledged supporters.'}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -5502,13 +6180,30 @@ function useClaimBundle(claimRef: string) {
       return;
     }
 
-    const [proofRules, pledges, recorderInvites, proofEvents, checkins, liveRoom] = await Promise.all([
+    const [
+      proofRules,
+      pledges,
+      recorderInvites,
+      proofEvents,
+      checkins,
+      liveRoom,
+      votes,
+      appeals,
+      result,
+      adminDecisions,
+      settlement,
+    ] = await Promise.all([
       supabase.from('claim_proof_rules').select('*').eq('claim_id', claim.id).order('position'),
-      supabase.from('claim_pledges').select('id, supporter_name, supporter_handle, amount_cents, created_at').eq('claim_id', claim.id).order('created_at', { ascending: false }),
+      supabase.from('claim_pledges').select('id, claim_id, supporter_name, supporter_handle, supporter_email, amount_cents, status, wants_donate, created_at').eq('claim_id', claim.id).order('created_at', { ascending: false }),
       supabase.from('claim_recorder_invites').select('*').eq('claim_id', claim.id).order('created_at', { ascending: false }),
       supabase.from('claim_proof_events').select('*').eq('claim_id', claim.id).order('event_time', { ascending: false }),
       supabase.from('claim_checkins').select('*').eq('claim_id', claim.id).order('checked_in_at', { ascending: false }),
       supabase.from('claim_live_rooms').select('id, claim_id, livekit_room_name, recording_url, opened_at, closed_at').eq('claim_id', claim.id).maybeSingle(),
+      supabase.from('claim_votes').select('*').eq('claim_id', claim.id).order('created_at', { ascending: false }),
+      supabase.from('claim_appeals').select('*').eq('claim_id', claim.id).order('created_at', { ascending: false }),
+      supabase.from('claim_results').select('*').eq('claim_id', claim.id).maybeSingle(),
+      supabase.from('claim_admin_decisions').select('id, claim_id, decision, summary, created_at').eq('claim_id', claim.id).order('created_at', { ascending: false }),
+      supabase.from('claim_settlements').select('*').eq('claim_id', claim.id).maybeSingle(),
     ]);
 
     setData({
@@ -5519,6 +6214,11 @@ function useClaimBundle(claimRef: string) {
       proofEvents: (proofEvents.data ?? []) as ProofEvent[],
       checkins: (checkins.data ?? []) as Checkin[],
       liveRoom: liveRoom.data as LiveRoomRecord | null,
+      votes: (votes.data ?? []) as ClaimVote[],
+      appeals: (appeals.data ?? []) as ClaimAppeal[],
+      result: result.data as ClaimResult | null,
+      adminDecisions: (adminDecisions.data ?? []) as ClaimAdminDecision[],
+      settlement: settlement.data as ClaimSettlement | null,
     });
     setLoading(false);
   }
