@@ -107,6 +107,7 @@ test('claimer and multiple recorders can stream, leave, rejoin, and supporters c
 
   await leaveRoom(recorderOne);
   await leaveRoom(recorderTwo);
+  await expectTileCount(supporter, 0);
   await expect(supporter.getByTestId('live-empty-stage')).toBeVisible();
 
   await joinRoom(claimer, /Open live room/i);

@@ -4585,7 +4585,12 @@ function RecorderInvitePage({ token }: { token: string }) {
                 <button className="button button-primary" type="submit">Accept recorder role</button>
               </form>
             </>
-          ) : null}
+          ) : (
+            <div className="live-empty-stage" data-testid="live-empty-stage">
+              <strong>Waiting for streams</strong>
+              <p>Claimer or recorder video will appear here as soon as someone starts streaming.</p>
+            </div>
+          )}
           {message ? <p className="form-message">{message}</p> : null}
         </section>
       </main>
