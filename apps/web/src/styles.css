@@ -3357,12 +3357,6 @@ h3 {
   background: linear-gradient(135deg, rgba(255, 40, 110, 0.68), rgba(255, 255, 255, 0.14));
 }
 
-.live-floating-interaction-prompt {
-  color: rgba(4, 16, 6, 0.95);
-  border-color: rgba(150, 255, 129, 0.28);
-  background: linear-gradient(135deg, rgba(150, 255, 129, 0.88), rgba(66, 221, 255, 0.72));
-}
-
 .live-floating-lane-0 {
   right: 0;
 }
