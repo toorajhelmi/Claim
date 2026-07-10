@@ -219,6 +219,14 @@ type LiveKitTokenResponse = {
   mode: LiveRoomMode;
 };
 
+type ClaimAccess = {
+  canViewSatisfiedOutcome: boolean;
+  hasPledged: boolean;
+  isOwner: boolean;
+  isRecorder: boolean;
+  requiresPledgeToView: boolean;
+};
+
 type LiveRoomTile = {
   id: string;
   participantName: string;
@@ -485,7 +493,7 @@ type UnifiedHomeData = {
 };
 
 const finalOrReviewClaimStatuses: ClaimStatus[] = ['under_review', 'verified', 'not_proven', 'cancelled', 'disputed'];
-const discoverClaimStatuses: ClaimStatus[] = ['preview', 'open_for_backing', 'threshold_met', 'scheduled', 'live'];
+const discoverClaimStatuses: ClaimStatus[] = ['preview', 'open_for_backing', 'threshold_met', 'scheduled', 'live', 'verified'];
 const supporterUpcomingClaimStatuses: ClaimStatus[] = ['preview', 'open_for_backing', 'threshold_met', 'scheduled'];
 
 function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
@@ -2934,6 +2942,7 @@ function isValidEmail(value: string) {
 function ClaimDetailPage({ slug }: { slug: string }) {
   const { data, loading, error, reload } = useClaimBundle(slug);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
   const [pledgeMessage, setPledgeMessage] = useState('');
   const [setupMessage, setSetupMessage] = useState('');
   const [activeTab, setActiveTab] = useState<ClaimDetailTabKey>(() => getClaimDetailTabFromSearch());
@@ -2950,6 +2959,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     async function loadCurrentUser() {
       const { data: userData } = await supabase.auth.getUser();
       setCurrentUserId(userData.user?.id ?? null);
+      setCurrentUserEmail(String(userData.user?.email ?? '').trim().toLowerCase());
     }
 
     void loadCurrentUser();
@@ -3036,15 +3046,28 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     event.preventDefault();
     if (!data) return;
     const formData = new FormData(event.currentTarget);
+    const supporterEmail = normalizeEmail(String(formData.get('supporterEmail') || currentUserEmail || ''));
+
+    if (data.claim.pledge_threshold_cents > 0 && !isValidEmail(supporterEmail)) {
+      setPledgeMessage('Add a valid email so your pledge unlocks access to this paid claim.');
+      return;
+    }
+
     const { error: pledgeError } = await supabase.from('claim_pledges').insert({
       claim_id: data.claim.id,
       supporter_name: String(formData.get('supporterName') || '').trim(),
       supporter_handle: nullableString(formData.get('supporterHandle')),
-      supporter_email: nullableString(formData.get('supporterEmail')),
+      supporter_email: supporterEmail || null,
       amount_cents: dollarsToCents(formData.get('amount')),
       source_channel: 'claim_page',
     });
-    setPledgeMessage(pledgeError ? pledgeError.message : 'Pledge intent saved.');
+    setPledgeMessage(
+      pledgeError
+        ? pledgeError.message
+        : data.claim.status === 'verified'
+          ? 'Pledge saved. You can now watch this verified outcome from the result page.'
+          : 'Pledge saved. You can now join this paid claim when the room opens.',
+    );
     if (!pledgeError) {
       event.currentTarget.reset();
       await reload();
@@ -3934,7 +3957,14 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                 ) : (
                   <form className="compact-form" onSubmit={handlePledge}>
                     <FormField label="Name" name="supporterName" required placeholder="Supporter name" />
-                    <FormField label="Email for live reminder" name="supporterEmail" type="email" placeholder="optional" />
+                    <FormField
+                      label={data.claim.pledge_threshold_cents > 0 ? 'Email for access' : 'Email for live reminder'}
+                      name="supporterEmail"
+                      type="email"
+                      defaultValue={currentUserEmail}
+                      placeholder={data.claim.pledge_threshold_cents > 0 ? 'required for paid access' : 'optional'}
+                      required={data.claim.pledge_threshold_cents > 0}
+                    />
                     <FormField label="Pledge amount ($)" name="amount" type="number" defaultValue="25" />
                     <button className="button button-primary" type="submit">Back this claim</button>
                   </form>
@@ -4177,6 +4207,8 @@ function ClaimLivePage({ slug }: { slug: string }) {
 
 function ClaimResultPage({ slug }: { slug: string }) {
   const { data, loading, error } = useClaimBundle(slug);
+  const [claimAccess, setClaimAccess] = useState<ClaimAccess | null>(null);
+  const [claimAccessLoading, setClaimAccessLoading] = useState(false);
 
   useEffect(() => {
     if (!data?.claim) {
@@ -4186,8 +4218,89 @@ function ClaimResultPage({ slug }: { slug: string }) {
     replaceBrowserPath(getClaimResultPath(data.claim));
   }, [data?.claim.id, data?.claim.slug]);
 
+  useEffect(() => {
+    if (!data?.claim) {
+      return;
+    }
+
+    const claim = data.claim;
+    const requiresSatisfiedOutcomeGate =
+      claim.status === 'verified' && claim.pledge_threshold_cents > 0;
+
+    if (!requiresSatisfiedOutcomeGate) {
+      setClaimAccess(null);
+      setClaimAccessLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadClaimAccess() {
+      setClaimAccessLoading(true);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const response = await fetch('/api/claim-access', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionData.session?.access_token ? { Authorization: `Bearer ${sessionData.session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ claimId: claim.id }),
+      });
+      const body = (await response.json().catch(() => null)) as ClaimAccess | null;
+
+      if (!cancelled) {
+        setClaimAccess(response.ok && body ? body : {
+          canViewSatisfiedOutcome: false,
+          hasPledged: false,
+          isOwner: false,
+          isRecorder: false,
+          requiresPledgeToView: true,
+        });
+        setClaimAccessLoading(false);
+      }
+    }
+
+    void loadClaimAccess();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.claim.id, data?.claim.status, data?.claim.pledge_threshold_cents]);
+
   if (loading) return <LoadingPage label="Loading result..." />;
   if (error || !data) return <ErrorPage message={error ?? 'Claim not found.'} />;
+
+  const requiresSatisfiedOutcomeGate = data.claim.status === 'verified' && data.claim.pledge_threshold_cents > 0;
+
+  if (requiresSatisfiedOutcomeGate && (claimAccessLoading || !claimAccess)) {
+    return <LoadingPage label="Checking pledge access..." />;
+  }
+
+  if (requiresSatisfiedOutcomeGate && claimAccess && !claimAccess.canViewSatisfiedOutcome) {
+    return (
+      <AppChrome>
+        <main className="app-page section-shell">
+          <ClaimHeader claim={data.claim} />
+          <section className="mvp-panel access-gate-panel">
+            <p className="eyebrow">Pledge required</p>
+            <h2>Back this verified claim to watch.</h2>
+            <p>
+              This claim reached a satisfied outcome and remains discoverable. Because it had a paid pledge threshold,
+              new supporters need to pledge before viewing the event evidence and outcome package.
+            </p>
+            <div className="action-grid compact-action-grid">
+              <a className="button button-primary" href={getClaimDetailPath(data.claim, '?tab=backing')}>
+                Pledge to watch
+              </a>
+              <a className="button button-ghost" href={getClaimDetailPath(data.claim)}>
+                Claim overview
+              </a>
+            </div>
+          </section>
+        </main>
+      </AppChrome>
+    );
+  }
 
   return (
     <AppChrome>
@@ -4495,7 +4608,7 @@ function LiveRoomSession({
     const accessToken = sessionData.session?.access_token;
 
     if (!accessToken) {
-      throw new Error(`Sign in as the claimer or accepted recorder before joining a ${sessionLabel}.`);
+      throw new Error(`Sign in before joining this ${sessionLabel}. Paid claims also require a pledge before supporter access.`);
     }
 
     const tokenResponse = await fetch('/api/livekit-token', {

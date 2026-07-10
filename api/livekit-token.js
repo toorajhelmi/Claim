@@ -94,7 +94,7 @@ module.exports = async function handler(request, response) {
   });
   const { data: claim, error: claimError } = await supabaseAdmin
     .from('claims')
-    .select('id, slug, creator_id, creator_name, status')
+    .select('id, slug, creator_id, creator_name, status, pledge_threshold_cents')
     .eq('slug', cleanText(claimSlug))
     .single();
 
@@ -121,6 +121,7 @@ module.exports = async function handler(request, response) {
       : 'supporter';
   const isTestMode = cleanText(mode) === 'test';
   const canPublish = role === 'claimer' || role === 'recorder';
+  const requiresPledge = Number(claim.pledge_threshold_cents || 0) > 0;
 
   if (isTestMode && !canPublish) {
     response.status(403).json({ error: 'Only the claimer and accepted recorders can join the private test room.' });
@@ -130,6 +131,27 @@ module.exports = async function handler(request, response) {
   if (!isTestMode && claim.status !== 'live') {
     response.status(403).json({ error: 'The official live event has not started yet.' });
     return;
+  }
+
+  if (!isTestMode && role === 'supporter' && requiresPledge) {
+    const { data: pledge } = userEmail
+      ? await supabaseAdmin
+        .from('claim_pledges')
+        .select('id')
+        .eq('claim_id', claim.id)
+        .ilike('supporter_email', userEmail)
+        .in('status', ['intent', 'authorized', 'collected'])
+        .limit(1)
+        .maybeSingle()
+      : { data: null };
+
+    if (!pledge) {
+      response.status(402).json({
+        error: 'Pledge before watching this paid claim.',
+        code: 'PLEDGE_REQUIRED',
+      });
+      return;
+    }
   }
 
   const roomName = `claim-${claim.id}`;
