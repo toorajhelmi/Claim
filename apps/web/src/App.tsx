@@ -795,11 +795,6 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
             <h1 className="page-title">{pageHeader.title}</h1>
             {pageHeader.lede ? <p className="page-lede">{pageHeader.lede}</p> : null}
           </div>
-          {activeTab === 'home' ? (
-            <div className="home-hero-actions">
-              <a className="button button-ghost" href="/claims/new">Create claim</a>
-            </div>
-          ) : null}
         </section>
 
         {activeTab === 'home' ? (
@@ -1907,29 +1902,36 @@ function AppChrome({
   return (
     <div className={immersive ? 'app-chrome app-chrome-immersive' : 'app-chrome app-chrome-product'}>
       {immersive || adminOnly ? null : (
-        <details className="app-menu">
-          <summary aria-label="Open navigation menu">
-            <span className="brand-mark">{appConfig.name.charAt(0)}</span>
-            <span className="hamburger-lines" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </span>
-          </summary>
-          <nav aria-label="Account actions">
-            {isCreatePage ? null : <a href="/claims/new">Create claim</a>}
-            <a href="/support">Support a claim</a>
-            <a href="/#how-it-works">How it works</a>
-            <a href="/terms">Terms</a>
-            {isSignedIn ? (
-              <button type="button" onClick={() => void handleSignOut()}>
-                Sign out
-              </button>
-            ) : (
-              <a href={`/auth?next=${encodeURIComponent(currentPath)}`}>Sign in</a>
-            )}
-          </nav>
-        </details>
+        <header className="app-top-rail" aria-label="App actions">
+          <details className="app-menu">
+            <summary aria-label="Open navigation menu">
+              <span className="brand-mark">{appConfig.name.charAt(0)}</span>
+              <span className="hamburger-lines" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+            </summary>
+            <nav aria-label="Account actions">
+              <a href="/support">Support a claim</a>
+              <a href="/#how-it-works">How it works</a>
+              <a href="/terms">Terms</a>
+              {isSignedIn ? (
+                <button type="button" onClick={() => void handleSignOut()}>
+                  Sign out
+                </button>
+              ) : (
+                <a href={`/auth?next=${encodeURIComponent(currentPath)}`}>Sign in</a>
+              )}
+            </nav>
+          </details>
+          <span className="app-top-rail-line" aria-hidden="true" />
+          {isCreatePage ? (
+            <span className="app-top-plus app-top-plus-disabled" aria-label="Create claim">+</span>
+          ) : (
+            <a className="app-top-plus" href="/claims/new" aria-label="Create claim">+</a>
+          )}
+        </header>
       )}
       {children}
       {showAppTabBar ? (

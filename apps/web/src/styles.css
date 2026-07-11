@@ -202,13 +202,25 @@ canvas {
   background: linear-gradient(135deg, var(--green), var(--cyan));
 }
 
-.app-menu {
+.app-top-rail {
   position: fixed;
   top: max(0.75rem, env(safe-area-inset-top));
+  right: max(0.75rem, env(safe-area-inset-right));
   left: max(0.75rem, env(safe-area-inset-left));
   z-index: 30;
+  display: grid;
+  grid-template-columns: auto minmax(1.5rem, 1fr) auto;
+  gap: 0.35rem;
+  align-items: center;
+  pointer-events: none;
+}
+
+.app-menu {
+  position: relative;
+  z-index: 2;
   width: fit-content;
-  max-width: calc(100vw - 1.5rem);
+  max-width: calc(100vw - 5.5rem);
+  pointer-events: auto;
 }
 
 .app-menu summary {
@@ -218,10 +230,10 @@ canvas {
   min-height: 3rem;
   padding: 0.42rem 0.7rem 0.42rem 0.42rem;
   color: #fff;
-  border: 1px solid var(--line);
-  border-radius: 1rem;
-  background: rgba(8, 11, 18, 0.9);
-  box-shadow: 0 16px 46px rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(112, 255, 139, 0.2);
+  border-radius: 1rem 1.15rem 1.15rem 1rem;
+  background: linear-gradient(135deg, rgba(6, 10, 16, 0.97), rgba(10, 24, 18, 0.94));
+  box-shadow: 0 16px 46px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(112, 255, 139, 0.05);
   cursor: pointer;
   list-style: none;
   backdrop-filter: blur(18px);
@@ -245,10 +257,12 @@ canvas {
 }
 
 .app-menu nav {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
   display: grid;
   gap: 0.35rem;
   width: min(14rem, calc(100vw - 1.5rem));
-  margin-top: 0.5rem;
   padding: 0.55rem;
   border: 1px solid var(--line);
   border-radius: 1rem;
@@ -276,6 +290,42 @@ canvas {
 .app-menu nav button:hover {
   color: #fff;
   background: rgba(255, 255, 255, 0.07);
+}
+
+.app-top-rail-line {
+  min-width: 0;
+  height: 0.42rem;
+  border: 1px solid rgba(112, 255, 139, 0.12);
+  border-right: 0;
+  border-left: 0;
+  background:
+    linear-gradient(90deg, rgba(112, 255, 139, 0.18), rgba(112, 255, 139, 0.04), rgba(66, 221, 255, 0.14)),
+    rgba(8, 11, 18, 0.88);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+}
+
+.app-top-plus {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+  color: #061006;
+  font-size: 1.45rem;
+  font-weight: 950;
+  text-decoration: none;
+  border: 1px solid rgba(112, 255, 139, 0.35);
+  border-radius: 1.15rem 1rem 1rem 1.15rem;
+  background: linear-gradient(135deg, var(--green), var(--cyan));
+  box-shadow: 0 16px 46px rgba(0, 0, 0, 0.28), 0 12px 34px rgba(112, 255, 139, 0.14);
+  pointer-events: auto;
+}
+
+.app-top-plus-disabled {
+  color: rgba(248, 251, 255, 0.45);
+  background: rgba(8, 11, 18, 0.9);
 }
 
 .app-tab-bar {
