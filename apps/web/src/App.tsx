@@ -4675,7 +4675,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                       By pledging, you agree to the <a href="/terms">payment, voting, appeal, and reimbursement terms</a>.
                     </p>
                     <button className="button button-primary" type="submit" disabled={!currentUserId || !defaultPaymentMethod}>
-                      {defaultPaymentMethod ? 'Back this claim' : 'Add payment method first'}
+                      {defaultPaymentMethod ? 'Confirm pledge' : 'Add payment method first'}
                     </button>
                   </form>
                 )}
