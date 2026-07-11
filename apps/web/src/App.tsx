@@ -483,6 +483,7 @@ const defaultStatementRules = [
 
 export function App() {
   const route = useMemo(() => getRoute(window.location.pathname), []);
+  const [adminRouteState, setAdminRouteState] = useState<'loading' | 'admin' | 'user'>('loading');
 
   useEffect(() => {
     document.title = `${appConfig.name} - ${appConfig.tagline}`;
@@ -490,6 +491,62 @@ export function App() {
       .querySelector('meta[name="description"]')
       ?.setAttribute('content', appConfig.description);
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadAdminRouteState() {
+      if (route.name === 'auth' || route.name === 'auth-callback') {
+        setAdminRouteState('user');
+        return;
+      }
+
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData.user;
+
+      if (!user) {
+        if (mounted) {
+          setAdminRouteState('user');
+        }
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('platform_role')
+        .eq('id', user.id)
+        .maybeSingle();
+      const platformRole = (profile as { platform_role?: string } | null)?.platform_role;
+
+      if (mounted) {
+        setAdminRouteState(platformRole === 'admin' ? 'admin' : 'user');
+      }
+    }
+
+    void loadAdminRouteState();
+
+    return () => {
+      mounted = false;
+    };
+  }, [route.name]);
+
+  if (route.name !== 'auth' && route.name !== 'auth-callback' && adminRouteState === 'loading') {
+    return (
+      <div className="app-chrome app-chrome-product">
+        <main className="app-page section-shell">
+          <p className="eyebrow">Loading Klaimd...</p>
+        </main>
+      </div>
+    );
+  }
+
+  if (adminRouteState === 'admin' && route.name !== 'admin') {
+    return <AdminPage />;
+  }
+
+  if (route.name === 'admin' && adminRouteState !== 'admin') {
+    return <ErrorPage message="Admin access is required." />;
+  }
 
   if (route.name === 'new-claim') {
     return <CreateClaimPage />;
@@ -750,6 +807,7 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
             actionCards={actionCards}
             discoverCards={prioritizeHomeDiscoveryCards(discoverCards).slice(0, 8)}
             shortcutCards={shortcutCards}
+            showShortcutRail={ownedCards.length > 0 || recordingAssignmentCards.length > 0}
           />
         ) : null}
 
@@ -788,41 +846,63 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
 function UnifiedHomeView({
   actionCards,
   discoverCards,
+  showShortcutRail,
   shortcutCards,
 }: {
   actionCards: HomeActionCard[];
   discoverCards: HomeClaimCard[];
+  showShortcutRail: boolean;
   shortcutCards: HomeShortcutCard[];
 }) {
   return (
     <div className="unified-home-grid discovery-home-grid">
       <HomeRail
-        eyebrow="Discover"
-        title="Claims to back or watch."
+        eyebrow="New claims"
+        title="Find something worth backing."
         cards={discoverCards}
-        emptyText="No public claims are ready to discover yet."
+        emptyText="No new public claims are ready to support yet."
         featured
         ctaHref="/discover"
-        ctaLabel="Browse all"
+        ctaLabel="Search claims"
       />
-      <ShortcutRail shortcuts={shortcutCards} />
+      {showShortcutRail ? <ShortcutRail shortcuts={shortcutCards.filter((shortcut) => shortcut.id !== 'supporting')} /> : null}
       {actionCards.length > 0 ? <ActionRail actions={actionCards.slice(0, 3)} /> : null}
     </div>
   );
 }
 
 function DiscoverView({ claimCards }: { claimCards: HomeClaimCard[] }) {
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredCards = normalizedQuery
+    ? claimCards.filter((card) => [
+      card.claim.title,
+      card.claim.creator_name,
+      card.claim.description ?? '',
+      card.claim.status.replace(/_/g, ' '),
+    ].some((value) => value.toLowerCase().includes(normalizedQuery)))
+    : claimCards;
+
   return (
     <div className="unified-home-grid">
       <section className="mvp-panel unified-section-panel">
         <div className="panel-heading-row">
           <div>
             <p className="eyebrow">Discover</p>
-            <h2>Find claims to back or watch.</h2>
+            <h2>Search and browse claims.</h2>
           </div>
           <a className="button button-ghost" href="/claims/new">Create instead</a>
         </div>
-        <HomeClaimCardList cards={claimCards} emptyText="No public claims are ready to discover yet." />
+        <label className="discover-search">
+          Search claims
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by claim, creator, status..."
+            type="search"
+          />
+        </label>
+        <HomeClaimCardList cards={filteredCards} emptyText="No matching public claims yet." />
       </section>
     </div>
   );
@@ -1022,8 +1102,8 @@ function HomeRail({
 function ActionRail({ actions }: { actions: HomeActionCard[] }) {
   return (
     <section className="mvp-panel unified-section-panel action-panel">
-      <p className="eyebrow">Needs your action</p>
-      <h2>Do these next.</h2>
+      <p className="eyebrow">Live and next steps</p>
+      <h2>Do not miss these.</h2>
       <div className="home-action-grid">
         {actions.map((action) => (
           <a className="home-action-card" href={action.href} key={action.id}>
@@ -1115,11 +1195,14 @@ function createHomeClaimCard({
   const isFinalOrReview = finalOrReviewClaimStatuses.includes(claim.status);
   const isOwner = relationships.includes('Your claim');
   const isRecorder = relationships.includes('Recording');
+  const isSupported = relationships.includes('Supported');
   const statusLabel = claim.status.replace(/_/g, ' ');
   const pledgeText = pledge ? `${formatMoney(pledge.amount_cents)} pledged by you` : `${formatMoney(claim.pledge_pool_cents)} pledged`;
   const scheduleText = claim.live_starts_at ? `Live ${formatDateTime(claim.live_starts_at)}` : `Deadline ${formatDateTime(claim.deadline_at)}`;
   const href = isLive
-    ? getClaimLivePath(claim)
+    ? isOwner || isRecorder
+      ? getClaimLivePath(claim)
+      : getClaimDetailPath(claim, '?tab=live')
     : isFinalOrReview
       ? getClaimResultPath(claim)
       : isRecorder
@@ -1235,12 +1318,13 @@ function createHomeActionCards(
 
   supportedCards.forEach((card) => {
     if (card.claim.status === 'live') {
+      const pledge = homeData.pledgesByClaimId.get(card.claim.id);
       actions.push({
         id: `support-live-${card.claim.id}`,
         claimId: card.claim.id,
         title: card.claim.title,
-        label: 'Supported claim live',
-        detail: 'A claim you backed is live now.',
+        label: 'Your pledged claim is live',
+        detail: `You already pledged${pledge ? ` ${formatMoney(pledge.amount_cents)}` : ''}. Watch the proof as it happens.`,
         href: getClaimLivePath(card.claim),
         ctaLabel: 'Watch live',
       });
@@ -1309,19 +1393,30 @@ function createActivityCards(
     .map<HomeActivityCard>((card) => {
       const relationship = card.relationships[0] ?? 'Claim';
       const pledge = homeData.pledgesByClaimId.get(card.claim.id);
+      const isSupported = card.relationships.includes('Supported');
       const statusLabel = card.claim.status.replace(/_/g, ' ');
-      const detailParts = [
-        relationship,
-        pledge ? `${formatMoney(pledge.amount_cents)} pledged by you` : `${formatMoney(card.claim.pledge_pool_cents)} pledged`,
-        card.claim.live_starts_at ? `Live ${formatDateTime(card.claim.live_starts_at)}` : '',
-      ].filter(Boolean);
+      const detailParts = isSupported
+        ? [
+          pledge ? `You pledged ${formatMoney(pledge.amount_cents)}` : 'You pledged on this claim',
+          `${card.claim.pledge_pool_cents ? formatMoney(card.claim.pledge_pool_cents) : '$0'} total backed`,
+          card.claim.live_starts_at ? `Live ${formatDateTime(card.claim.live_starts_at)}` : '',
+        ].filter(Boolean)
+        : [
+          relationship,
+          `${formatMoney(card.claim.pledge_pool_cents)} pledged`,
+          card.claim.live_starts_at ? `Live ${formatDateTime(card.claim.live_starts_at)}` : '',
+        ].filter(Boolean);
 
       return {
         id: `${relationship}-${card.claim.id}`,
         title: card.claim.title,
-        label: getActivityLabel(card),
+        label: isSupported && pledge ? `Pledged ${formatMoney(pledge.amount_cents)}` : getActivityLabel(card),
         detail: `${statusLabel} · ${detailParts.join(' · ')}`,
-        href: card.href,
+        href: isSupported
+          ? card.claim.status === 'live'
+            ? getClaimDetailPath(card.claim, '?tab=live')
+            : getClaimDetailPath(card.claim)
+          : card.href,
       };
     })
     .slice(0, 12);
@@ -1771,11 +1866,19 @@ function getRoute(pathname: string):
   return { name: 'landing' };
 }
 
-function AppChrome({ children, immersive = false }: { children: ReactNode; immersive?: boolean }) {
+function AppChrome({
+  adminOnly = false,
+  children,
+  immersive = false,
+}: {
+  adminOnly?: boolean;
+  children: ReactNode;
+  immersive?: boolean;
+}) {
   const isCreatePage = window.location.pathname === '/claims/new';
   const currentPath = window.location.pathname;
   const activeNavigationKey = getActiveAppNavigationKey(currentPath);
-  const showAppTabBar = !immersive && !currentPath.startsWith('/auth');
+  const showAppTabBar = !immersive && !adminOnly && !currentPath.startsWith('/auth');
   const [isSignedIn, setIsSignedIn] = useState(false);
 
   useEffect(() => {
@@ -1803,7 +1906,7 @@ function AppChrome({ children, immersive = false }: { children: ReactNode; immer
 
   return (
     <div className={immersive ? 'app-chrome app-chrome-immersive' : 'app-chrome app-chrome-product'}>
-      {immersive ? null : (
+      {immersive || adminOnly ? null : (
         <details className="app-menu">
           <summary aria-label="Open navigation menu">
             <span className="brand-mark">{appConfig.name.charAt(0)}</span>
@@ -1817,8 +1920,7 @@ function AppChrome({ children, immersive = false }: { children: ReactNode; immer
             {isCreatePage ? null : <a href="/claims/new">Create claim</a>}
             <a href="/support">Support a claim</a>
             <a href="/#how-it-works">How it works</a>
-            <a href="/terms">Payment terms</a>
-            <a href="/admin">Admin</a>
+            <a href="/terms">Terms</a>
             {isSignedIn ? (
               <button type="button" onClick={() => void handleSignOut()}>
                 Sign out
@@ -1849,7 +1951,10 @@ function AppChrome({ children, immersive = false }: { children: ReactNode; immer
   );
 }
 
-function getActiveAppNavigationKey(pathname: string): AppNavigationKey {
+function getActiveAppNavigationKey(pathname: string): AppNavigationKey | null {
+  if (pathname.startsWith('/claims/') && !pathname.startsWith('/claims/new')) return null;
+  if (pathname.startsWith('/recorder/')) return null;
+  if (pathname.startsWith('/terms')) return null;
   if (pathname.startsWith('/discover')) return 'discover';
   if (pathname.startsWith('/activity')) return 'activity';
   if (pathname.startsWith('/profile')) return 'profile';
@@ -2142,8 +2247,8 @@ function TermsPage() {
     <AppChrome>
       <main className="app-page section-shell">
         <section className="dashboard-hero">
-          <p className="eyebrow">Payment terms</p>
-          <h1 className="page-title">Pledges, voting, appeals, and reimbursements.</h1>
+          <p className="eyebrow">Terms</p>
+          <h1 className="page-title">Klaimd terms.</h1>
         </section>
         <section className="mvp-panel terms-panel">
           <h2>Pledging</h2>
@@ -2265,6 +2370,11 @@ function AdminPage() {
     await loadAdminData();
   }
 
+  async function handleAdminSignOut() {
+    await supabase.auth.signOut();
+    window.location.href = '/';
+  }
+
   if (loading) return <LoadingPage label="Loading admin..." />;
 
   if (!isAdmin) {
@@ -2274,12 +2384,17 @@ function AdminPage() {
   const pendingAppeals = appeals.filter((appeal) => appeal.status === 'pending');
 
   return (
-    <AppChrome>
+    <AppChrome adminOnly>
       <main className="app-page section-shell admin-page">
         <section className="dashboard-hero">
-          <p className="eyebrow">Admin</p>
-          <h1 className="page-title">Operations panel.</h1>
-          <p className="page-lede">Review claims, pledges, votes, appeals, and outcome settlement state.</p>
+          <div>
+            <p className="eyebrow">Admin</p>
+            <h1 className="page-title">Operations panel.</h1>
+            <p className="page-lede">Review claims, pledges, votes, appeals, and outcome settlement state.</p>
+          </div>
+          <button className="button button-ghost" type="button" onClick={() => void handleAdminSignOut()}>
+            Sign out
+          </button>
         </section>
         {message ? <p className="form-message">{message}</p> : null}
         <section className="profile-stat-grid">
@@ -4710,6 +4825,17 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                   Join the live room when the proof event opens. After the event, use the result page to review the
                   outcome and evidence package.
                 </p>
+                <ClaimStatementPreview
+                  label="Claim"
+                  title={data.claim.title}
+                  description={data.claim.description ?? undefined}
+                />
+                <div className="profile-stat-grid">
+                  <Metric label="Pledged" value={formatMoney(data.claim.pledge_pool_cents)} />
+                  <Metric label="Supporters" value={String(data.claim.supporter_count)} />
+                  <Metric label="Live start" value={formatDateTime(data.claim.live_starts_at)} />
+                  <Metric label="Deadline" value={formatDateTime(data.claim.deadline_at)} />
+                </div>
                 <div className="action-grid compact-action-grid">
                   <a className="button button-primary" href={claimLivePath}>Open live room</a>
                   <a className="button button-ghost" href={claimResultPath}>View result page</a>
@@ -4899,11 +5025,28 @@ function ClaimLivePage({ slug }: { slug: string }) {
   return (
     <AppChrome immersive={liveStageActive}>
       <main className={`app-page section-shell ${liveStageActive ? 'live-stage-page' : ''}`}>
-        {!liveStageActive && !isOfficialLive ? <ClaimHeader claim={data.claim} label="LIVE ROOM" /> : null}
+        {!liveStageActive ? (
+          <>
+            <ClaimHeader claim={data.claim} label="LIVE ROOM" />
+            <section className="mvp-panel live-claim-context-panel">
+              <ClaimStatementPreview
+                label="Claim"
+                title={data.claim.title}
+                description={data.claim.description ?? undefined}
+              />
+              <div className="profile-stat-grid">
+                <Metric label="Pledged" value={formatMoney(data.claim.pledge_pool_cents)} />
+                <Metric label="Supporters" value={String(data.claim.supporter_count)} />
+                <Metric label="Live start" value={formatDateTime(data.claim.live_starts_at)} />
+                <Metric label="Deadline" value={formatDateTime(data.claim.deadline_at)} />
+              </div>
+            </section>
+          </>
+        ) : null}
         {shouldGatePaidLiveAccess ? (
           <section className="mvp-panel access-gate-panel">
             <p className="eyebrow">Pledge required</p>
-            <h2>{pledgeAccessLoading ? 'Checking pledge access.' : 'Back this paid claim to watch live.'}</h2>
+            <h2>{pledgeAccessLoading ? 'Checking pledge access.' : 'Pledge required to watch live.'}</h2>
             <p>
               This claim has a pledge threshold. Supporters need to pledge before joining the live room while the
               outcome is still being determined.
