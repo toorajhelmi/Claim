@@ -1787,6 +1787,8 @@ h3 {
 }
 
 .unified-claim-card {
+  grid-template-rows: auto minmax(5.25rem, auto) auto auto;
+  align-content: start;
   flex: 0 0 min(18.5rem, 84vw);
   gap: 0.48rem;
   min-height: 10.5rem;
@@ -1797,6 +1799,8 @@ h3 {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  min-height: 1.45rem;
+  align-items: flex-start;
 }
 
 .relationship-row span {
@@ -1812,9 +1816,28 @@ h3 {
 }
 
 .claim-card-row small {
+  display: -webkit-box;
+  min-height: 2.45rem;
+  overflow: hidden;
   color: var(--muted);
   font-size: 0.84rem;
   line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.unified-claim-card .claim-title-effect {
+  display: -webkit-box;
+  min-height: 4.7em;
+  overflow: hidden;
+  line-height: 1.18;
+  text-align: left;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.unified-claim-card em {
+  align-self: end;
 }
 
 .profile-layout {
