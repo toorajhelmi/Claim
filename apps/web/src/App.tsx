@@ -2296,6 +2296,13 @@ function AdminPage() {
   const [results, setResults] = useState<ClaimResult[]>([]);
   const [settlements, setSettlements] = useState<ClaimSettlement[]>([]);
   const [message, setMessage] = useState('');
+  const [adminTab, setAdminTab] = useState<'claims' | 'appeals'>('claims');
+  const [claimStatusFilter, setClaimStatusFilter] = useState<'all' | ClaimStatus>('all');
+  const [minPledgedFilter, setMinPledgedFilter] = useState('');
+  const [appealOnlyFilter, setAppealOnlyFilter] = useState(false);
+  const [appealStatusFilter, setAppealStatusFilter] = useState<'all' | ClaimAppeal['status']>('all');
+  const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
+  const [selectedAppealId, setSelectedAppealId] = useState<string | null>(null);
 
   async function loadAdminData() {
     setLoading(true);
@@ -2372,6 +2379,36 @@ function AdminPage() {
     await loadAdminData();
   }
 
+  async function submitAppealResolution(event: FormEvent<HTMLFormElement>, appealId: string) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const nextStatus = String(formData.get('appealStatus') || '');
+    const adminResponse = String(formData.get('adminResponse') || '').trim();
+
+    if (!['accepted', 'rejected'].includes(nextStatus) || !adminResponse) {
+      setMessage('Choose an appeal decision and add an admin response.');
+      return;
+    }
+
+    const { error: appealError } = await supabase
+      .from('claim_appeals')
+      .update({
+        admin_response: adminResponse,
+        resolved_at: new Date().toISOString(),
+        status: nextStatus,
+      })
+      .eq('id', appealId);
+
+    if (appealError) {
+      setMessage(appealError.message);
+      return;
+    }
+
+    setMessage('Appeal updated.');
+    event.currentTarget.reset();
+    await loadAdminData();
+  }
+
   async function handleAdminSignOut() {
     await supabase.auth.signOut();
     window.location.href = '/';
@@ -2384,6 +2421,24 @@ function AdminPage() {
   }
 
   const pendingAppeals = appeals.filter((appeal) => appeal.status === 'pending');
+  const minPledgedCents = Math.max(0, Math.round(Number(minPledgedFilter || 0) * 100));
+  const filteredClaims = claims.filter((claim) => {
+    const matchesStatus = claimStatusFilter === 'all' || claim.status === claimStatusFilter;
+    const matchesPledged = !minPledgedFilter || claim.pledge_pool_cents >= minPledgedCents;
+    const matchesAppeal = !appealOnlyFilter || appeals.some((appeal) => appeal.claim_id === claim.id);
+
+    return matchesStatus && matchesPledged && matchesAppeal;
+  });
+  const filteredAppeals = appeals.filter((appeal) => appealStatusFilter === 'all' || appeal.status === appealStatusFilter);
+  const selectedClaim = filteredClaims.find((claim) => claim.id === selectedClaimId) ?? filteredClaims[0] ?? null;
+  const selectedAppeal = filteredAppeals.find((appeal) => appeal.id === selectedAppealId) ?? filteredAppeals[0] ?? null;
+  const selectedAppealClaim = selectedAppeal ? claims.find((claim) => claim.id === selectedAppeal.claim_id) ?? null : null;
+  const selectedClaimPledges = selectedClaim ? pledges.filter((pledge) => pledge.claim_id === selectedClaim.id) : [];
+  const selectedClaimAppeals = selectedClaim ? appeals.filter((appeal) => appeal.claim_id === selectedClaim.id) : [];
+  const selectedClaimVotes = selectedClaim ? votes.filter((vote) => vote.claim_id === selectedClaim.id) : [];
+  const selectedClaimVoteSummary = getVoteSummary(selectedClaimVotes, getDistinctSupporterCount(selectedClaimPledges));
+  const selectedClaimResult = selectedClaim ? results.find((result) => result.claim_id === selectedClaim.id) ?? null : null;
+  const selectedClaimSettlement = selectedClaim ? settlements.find((settlement) => settlement.claim_id === selectedClaim.id) ?? null : null;
 
   return (
     <AppChrome adminOnly>
@@ -2405,61 +2460,182 @@ function AdminPage() {
           <Metric label="Pending appeals" value={String(pendingAppeals.length)} />
           <Metric label="Settlements" value={String(settlements.length)} />
         </section>
-        <section className="mvp-panel">
-          <p className="eyebrow">Claims</p>
-          <div className="admin-claim-list">
-            {claims.map((claim) => {
-              const claimVotes = votes.filter((vote) => vote.claim_id === claim.id);
-              const claimPledges = pledges.filter((pledge) => pledge.claim_id === claim.id);
-              const voteSummary = getVoteSummary(claimVotes, getDistinctSupporterCount(claimPledges));
-              const result = results.find((item) => item.claim_id === claim.id);
-              const settlement = settlements.find((item) => item.claim_id === claim.id);
+        <section className="mvp-panel admin-workspace">
+          <div className="admin-tabs" role="tablist" aria-label="Admin operations">
+            <button className={adminTab === 'claims' ? 'selected' : ''} type="button" onClick={() => setAdminTab('claims')}>
+              Claims
+            </button>
+            <button className={adminTab === 'appeals' ? 'selected' : ''} type="button" onClick={() => setAdminTab('appeals')}>
+              Appeals
+            </button>
+          </div>
 
-              return (
-                <article className="admin-claim-card" key={claim.id}>
-                  <div>
-                    <p className="eyebrow">{claim.status.replace(/_/g, ' ')}</p>
-                    <h2>{claim.title}</h2>
-                    <p>{formatMoney(claim.pledge_pool_cents)} pledged / locked {formatMoney(claim.stake_amount_cents)}</p>
+          {adminTab === 'claims' ? (
+            <div className="admin-split-view">
+              <section className="admin-list-panel">
+                <div className="admin-filters">
+                  <label>
+                    Status
+                    <select value={claimStatusFilter} onChange={(event) => setClaimStatusFilter(event.target.value as 'all' | ClaimStatus)}>
+                      <option value="all">All</option>
+                      {(['draft', 'preview', 'open_for_backing', 'threshold_met', 'scheduled', 'live', 'under_review', 'verified', 'not_proven', 'cancelled', 'disputed'] as ClaimStatus[]).map((status) => (
+                        <option value={status} key={status}>{status.replace(/_/g, ' ')}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Min pledged ($)
+                    <input
+                      min="0"
+                      onChange={(event) => setMinPledgedFilter(event.target.value)}
+                      step="1"
+                      type="number"
+                      value={minPledgedFilter}
+                    />
+                  </label>
+                  <label className="admin-check-filter">
+                    <input checked={appealOnlyFilter} onChange={(event) => setAppealOnlyFilter(event.target.checked)} type="checkbox" />
+                    Has appeal
+                  </label>
+                </div>
+                <div className="admin-row-list">
+                  {filteredClaims.length === 0 ? <p className="form-message">No claims match these filters.</p> : null}
+                  {filteredClaims.map((claim) => {
+                    const claimAppeals = appeals.filter((appeal) => appeal.claim_id === claim.id);
+
+                    return (
+                      <button
+                        className={selectedClaim?.id === claim.id ? 'admin-row selected' : 'admin-row'}
+                        key={claim.id}
+                        onClick={() => setSelectedClaimId(claim.id)}
+                        type="button"
+                      >
+                        <span>{claim.status.replace(/_/g, ' ')}</span>
+                        <strong>{claim.title}</strong>
+                        <small>
+                          {formatMoney(claim.pledge_pool_cents)} pledged · {claim.supporter_count} supporters
+                          {claimAppeals.length > 0 ? ` · ${claimAppeals.length} appeal${claimAppeals.length === 1 ? '' : 's'}` : ''}
+                        </small>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="admin-detail-panel">
+                {selectedClaim ? (
+                  <>
+                    <p className="eyebrow">{selectedClaim.status.replace(/_/g, ' ')}</p>
+                    <h2>{selectedClaim.title}</h2>
+                    <div className="profile-stat-grid">
+                      <Metric label="Pledged" value={formatMoney(selectedClaim.pledge_pool_cents)} />
+                      <Metric label="Supporters" value={String(selectedClaim.supporter_count)} />
+                      <Metric label="Appeals" value={String(selectedClaimAppeals.length)} />
+                      <Metric label="Settlement" value={selectedClaimSettlement?.status.replace(/_/g, ' ') ?? 'none'} />
+                    </div>
                     <p className="terms-note">
-                      Vote signal: accepted {voteSummary.accepted}, declined {voteSummary.declined}, threshold {voteSummary.threshold}.
-                      {result ? ` Last outcome: ${result.status}.` : ' No outcome yet.'}
-                      {settlement ? ` Settlement: ${settlement.status}.` : ''}
+                      Vote signal: accepted {selectedClaimVoteSummary.accepted}, declined {selectedClaimVoteSummary.declined}, threshold {selectedClaimVoteSummary.threshold}.
+                      {selectedClaimResult ? ` Last outcome: ${selectedClaimResult.status}.` : ' No outcome yet.'}
                     </p>
-                  </div>
-                  <form className="compact-form admin-outcome-form" onSubmit={(event) => void submitAdminOutcome(event, claim.id)}>
-                    <label>
-                      Outcome
-                      <select name="decision" required defaultValue="">
-                        <option value="" disabled>Select outcome</option>
-                        <option value="accepted">Accepted</option>
-                        <option value="declined">Declined</option>
-                        <option value="cancelled">Cancelled</option>
-                      </select>
-                    </label>
-                    <FormField label="Platform commission %" name="platformCommissionPercent" type="number" defaultValue="7.5" min="0" step="0.1" />
-                    <label>
-                      Admin summary
-                      <textarea name="summary" rows={3} required placeholder="Explain the final outcome and any appeal response." />
-                    </label>
-                    <button className="button button-primary" type="submit">Save final outcome</button>
-                  </form>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-        <section className="mvp-panel">
-          <p className="eyebrow">Appeals</p>
-          <div className="mini-list">
-            {appeals.length === 0 ? <p>No appeals yet.</p> : null}
-            {appeals.map((appeal) => (
-              <div key={appeal.id}>
-                <strong>{appeal.status} · {appeal.appellant_role}</strong>
-                <span>{appeal.reason}</span>
-              </div>
-            ))}
-          </div>
+                    <form className="compact-form admin-outcome-form" onSubmit={(event) => void submitAdminOutcome(event, selectedClaim.id)}>
+                      <label>
+                        Outcome
+                        <select name="decision" required defaultValue="">
+                          <option value="" disabled>Select outcome</option>
+                          <option value="accepted">Accepted</option>
+                          <option value="declined">Declined</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      </label>
+                      <FormField label="Platform commission %" name="platformCommissionPercent" type="number" defaultValue="7.5" min="0" step="0.1" />
+                      <label>
+                        Admin summary
+                        <textarea name="summary" rows={3} required placeholder="Explain the final outcome and any appeal response." />
+                      </label>
+                      <button className="button button-primary" type="submit">Save final outcome</button>
+                    </form>
+                  </>
+                ) : (
+                  <p className="form-message">Select a claim to review details.</p>
+                )}
+              </section>
+            </div>
+          ) : null}
+
+          {adminTab === 'appeals' ? (
+            <div className="admin-split-view">
+              <section className="admin-list-panel">
+                <div className="admin-filters">
+                  <label>
+                    Appeal status
+                    <select value={appealStatusFilter} onChange={(event) => setAppealStatusFilter(event.target.value as 'all' | ClaimAppeal['status'])}>
+                      <option value="all">All</option>
+                      <option value="pending">Pending</option>
+                      <option value="accepted">Accepted</option>
+                      <option value="rejected">Rejected</option>
+                      <option value="withdrawn">Withdrawn</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="admin-row-list">
+                  {filteredAppeals.length === 0 ? <p className="form-message">No appeals match this filter.</p> : null}
+                  {filteredAppeals.map((appeal) => {
+                    const appealClaim = claims.find((claim) => claim.id === appeal.claim_id);
+
+                    return (
+                      <button
+                        className={selectedAppeal?.id === appeal.id ? 'admin-row selected' : 'admin-row'}
+                        key={appeal.id}
+                        onClick={() => setSelectedAppealId(appeal.id)}
+                        type="button"
+                      >
+                        <span>{appeal.status} · {appeal.appellant_role}</span>
+                        <strong>{appealClaim?.title ?? 'Claim'}</strong>
+                        <small>{appeal.appellant_email} · {formatDateTime(appeal.created_at)}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="admin-detail-panel">
+                {selectedAppeal ? (
+                  <>
+                    <p className="eyebrow">{selectedAppeal.status} appeal</p>
+                    <h2>{selectedAppealClaim?.title ?? 'Claim appeal'}</h2>
+                    <p>{selectedAppeal.reason}</p>
+                    <div className="profile-stat-grid">
+                      <Metric label="Appellant" value={selectedAppeal.appellant_role} />
+                      <Metric label="Email" value={selectedAppeal.appellant_email} />
+                      <Metric label="Created" value={formatDateTime(selectedAppeal.created_at)} />
+                    </div>
+                    {selectedAppeal.admin_response ? <p className="form-message">{selectedAppeal.admin_response}</p> : null}
+                    {selectedAppeal.status === 'pending' ? (
+                      <form className="compact-form admin-outcome-form" onSubmit={(event) => void submitAppealResolution(event, selectedAppeal.id)}>
+                        <label>
+                          Appeal decision
+                          <select name="appealStatus" required defaultValue="">
+                            <option value="" disabled>Select decision</option>
+                            <option value="accepted">Accept appeal</option>
+                            <option value="rejected">Reject appeal</option>
+                          </select>
+                        </label>
+                        <label>
+                          Admin response
+                          <textarea name="adminResponse" rows={4} required placeholder="Explain the appeal decision or required follow-up." />
+                        </label>
+                        <button className="button button-primary" type="submit">Save appeal decision</button>
+                      </form>
+                    ) : (
+                      <p className="terms-note">This appeal has already been resolved.</p>
+                    )}
+                  </>
+                ) : (
+                  <p className="form-message">Select an appeal to review details.</p>
+                )}
+              </section>
+            </div>
+          ) : null}
         </section>
         <section className="mvp-panel">
           <p className="eyebrow">Refunds, reimbursements, and account actions</p>
@@ -3491,6 +3667,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
   const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(false);
   const [paymentActionStatus, setPaymentActionStatus] = useState<'idle' | 'starting' | 'verifying' | 'deleting'>('idle');
   const [pledgeMessage, setPledgeMessage] = useState('');
+  const [pledgeTopUpPrompt, setPledgeTopUpPrompt] = useState(false);
   const [setupMessage, setSetupMessage] = useState('');
   const [activeTab, setActiveTab] = useState<ClaimDetailTabKey>(() => getClaimDetailTabFromSearch());
   const [draftMode, setDraftMode] = useState<'review' | 'activate' | 'edit'>(() => {
@@ -3677,6 +3854,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     const supporterEmail = normalizeEmail(currentUserEmail);
 
     if (!currentUserId || !supporterEmail) {
+      setPledgeTopUpPrompt(false);
       setPledgeMessage('Sign in before pledging so Klaimd can save your payment method for future claims.');
       return;
     }
@@ -3684,11 +3862,13 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     const defaultPaymentMethod = getDefaultPaymentMethod(paymentMethods);
 
     if (!defaultPaymentMethod) {
+      setPledgeTopUpPrompt(false);
       setPledgeMessage('Add a payment method before pledging. Klaimd will keep it for future pledge top-ups.');
       return;
     }
 
     if (data.claim.pledge_threshold_cents > 0 && !isValidEmail(supporterEmail)) {
+      setPledgeTopUpPrompt(false);
       setPledgeMessage('Add a valid email so your pledge unlocks access to this paid claim.');
       return;
     }
@@ -3697,6 +3877,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
     const minimumNextPledgeCents = getMinimumNextPledgeCents(data.claim, data.pledges, supporterEmail);
 
     if (amountCents < minimumNextPledgeCents) {
+      setPledgeTopUpPrompt(false);
       setPledgeMessage(`Minimum pledge is ${formatMoney(minimumNextPledgeCents)} for this supporter.`);
       return;
     }
@@ -3710,6 +3891,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
       source_channel: 'claim_page',
       wants_donate: formData.get('wantsDonate') === 'on',
     });
+    setPledgeTopUpPrompt(!pledgeError);
     setPledgeMessage(
       pledgeError
         ? pledgeError.message
@@ -3725,6 +3907,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
 
   async function handleStartPaymentMethodSetup() {
     if (!data) return;
+    setPledgeTopUpPrompt(false);
 
     if (!currentUserId) {
       window.location.href = `/auth?next=${encodeURIComponent(getClaimDetailPath(data.claim, '?tab=backing'))}`;
@@ -3756,6 +3939,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
   }
 
   async function handleDeletePaymentMethod(paymentMethodId: string) {
+    setPledgeTopUpPrompt(false);
     setPaymentActionStatus('deleting');
     setPledgeMessage('Deleting payment method...');
     const { data: sessionData } = await supabase.auth.getSession();
@@ -4791,9 +4975,22 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                     <p className="terms-note">
                       By pledging, you agree to the <a href="/terms">payment, voting, appeal, and reimbursement terms</a>.
                     </p>
-                    <button className="button button-primary" type="submit" disabled={!currentUserId || !defaultPaymentMethod}>
-                      {defaultPaymentMethod ? 'Confirm pledge' : 'Add payment method first'}
-                    </button>
+                    {pledgeTopUpPrompt ? (
+                      <button
+                        className="button button-primary"
+                        type="button"
+                        onClick={() => {
+                          setPledgeTopUpPrompt(false);
+                          setPledgeMessage('Add an additional pledge amount, then confirm the top-up.');
+                        }}
+                      >
+                        Pledge more
+                      </button>
+                    ) : (
+                      <button className="button button-primary" type="submit" disabled={!currentUserId || !defaultPaymentMethod}>
+                        {defaultPaymentMethod ? 'Confirm pledge' : 'Add payment method first'}
+                      </button>
+                    )}
                   </form>
                 )}
                 {pledgeMessage ? <p className="form-message">{pledgeMessage}</p> : null}

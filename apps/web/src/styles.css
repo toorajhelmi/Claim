@@ -3683,24 +3683,134 @@ h3 {
   line-height: 1.55;
 }
 
-.admin-claim-list {
+.admin-workspace {
   display: grid;
   gap: 1rem;
 }
 
-.admin-claim-card {
+.admin-tabs {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.65fr);
-  gap: 1rem;
-  padding: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 0.35rem;
   border: 1px solid var(--line);
-  border-radius: 1rem;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.035);
 }
 
-.admin-claim-card h2 {
-  margin: 0.2rem 0 0.5rem;
-  font-size: clamp(1rem, 2.2vw, 1.35rem);
+.admin-tabs button {
+  min-height: 2.65rem;
+  border: 0;
+  border-radius: 999px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-tabs button.selected {
+  color: #111;
+  background: linear-gradient(135deg, var(--orange), #ffd36c);
+}
+
+.admin-split-view {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.85fr) minmax(0, 1.35fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.admin-list-panel,
+.admin-detail-panel {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.admin-detail-panel h2 {
+  margin: 0;
+  font-size: clamp(1.1rem, 2.5vw, 1.8rem);
+}
+
+.admin-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.admin-check-filter {
+  min-height: 3.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.95rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.admin-check-filter input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--orange);
+}
+
+.admin-row-list {
+  display: grid;
+  gap: 0.55rem;
+  max-height: 34rem;
+  overflow: auto;
+  padding-right: 0.2rem;
+}
+
+.admin-row {
+  width: 100%;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.035);
+  text-align: left;
+}
+
+.admin-row.selected,
+.admin-row:hover {
+  border-color: rgba(255, 132, 76, 0.7);
+  background: rgba(255, 132, 76, 0.12);
+}
+
+.admin-row span,
+.admin-row small {
+  color: var(--muted);
+}
+
+.admin-row span {
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.admin-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-row small {
+  line-height: 1.4;
 }
 
 .admin-outcome-form {
@@ -3974,7 +4084,8 @@ h3 {
     align-items: stretch;
   }
 
-  .admin-claim-card {
+  .admin-split-view,
+  .admin-filters {
     grid-template-columns: 1fr;
   }
 
