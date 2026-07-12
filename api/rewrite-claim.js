@@ -116,6 +116,65 @@ function appendLineIfMissing(lines, text, words, line) {
   return hasAnyText(text, words) ? lines : [...lines, line];
 }
 
+function inferProofContext(text) {
+  const normalized = text.toLowerCase();
+
+  return {
+    needsLocationProof: /\b(route|run|walk|cycle|drive|travel|cross|arrive|destination|distance|miles?|kilometers?|km|gps|location|map)\b/.test(normalized),
+    needsScreenProof: /\b(screen|app|website|code|repo|game|browser|software|spreadsheet|document|online|publish|post)\b/.test(normalized),
+    needsObjectProof: /\b(build|make|assemble|stack|cook|draw|paint|create|craft|object|items?|ingredients?|props?|materials?|before|after)\b/.test(normalized),
+    needsDocumentProof: /\b(receipt|donate|payment|email|message|transcript|document|form|contract|proof page)\b/.test(normalized),
+  };
+}
+
+function getRelevantSavedEvidenceLine(content) {
+  const context = inferProofContext(content);
+  const evidenceExamples = ['saved video or clips'];
+
+  if (context.needsObjectProof) {
+    evidenceExamples.push('close-up photos or before/after state captures');
+  }
+
+  if (context.needsScreenProof) {
+    evidenceExamples.push('screen recordings or published artifact links');
+  }
+
+  if (context.needsLocationProof) {
+    evidenceExamples.push('route, distance, or location records');
+  }
+
+  if (context.needsDocumentProof) {
+    evidenceExamples.push('receipts, transcripts, documents, or public records');
+  }
+
+  evidenceExamples.push('timestamped evidence links');
+
+  return `${evidenceExamples.join(', ')} must remain available for AI-assisted review.`;
+}
+
+function getRelevantLiveSourceLine(content) {
+  const context = inferProofContext(content);
+  const sources = ['a camera or live recording source'];
+
+  if (context.needsObjectProof) {
+    sources.push('close-up object/state views');
+  }
+
+  if (context.needsScreenProof) {
+    sources.push('screen share');
+  }
+
+  if (context.needsLocationProof) {
+    sources.push('route, distance, or location records');
+  }
+
+  if (context.needsDocumentProof) {
+    sources.push('document, receipt, transcript, or public record capture');
+  }
+
+  return `${sources.join(', ')} will capture the relevant parts of the attempt.`;
+}
+
 function strengthenProofRulesRewrite(content) {
   const lines = content.split(/\n+/).map((line) => line.trim()).filter(Boolean);
   let nextLines = lines.length > 0 ? lines : [cleanInput(content)];
@@ -139,7 +198,7 @@ function strengthenProofRulesRewrite(content) {
     nextLines,
     nextText,
     ['saved', 'archive', 'link', 'clip', 'recording remains'],
-    'Saved video, clips, public artifacts, GPS data, metadata, or evidence links must remain available for AI-assisted review.',
+    getRelevantSavedEvidenceLine(content),
   );
   nextText = nextLines.join('\n');
   nextLines = appendLineIfMissing(
@@ -161,7 +220,7 @@ function strengthenLiveSetupRewrite(content) {
     nextLines,
     nextText,
     ['phone', 'camera', 'gopro', 'go pro', 'bodycam', 'dashcam', 'drone', 'screen', 'stream', 'live source', 'gps', 'tracker', 'sensor', 'transcript', 'public feed', 'venue feed'],
-    'A live recording source, screen share, device tracker, sensor, transcript, or public proof feed will capture the attempt.',
+    getRelevantLiveSourceLine(content),
   );
   nextText = nextLines.join('\n');
   nextLines = appendLineIfMissing(
@@ -175,7 +234,7 @@ function strengthenLiveSetupRewrite(content) {
     nextLines,
     nextText,
     ['head view', 'body view', 'full body', 'route', 'location', 'gps', 'angle', 'view', 'screen share', 'sensor', 'tracker', 'feed', 'metadata', 'transcript', 'outcome'],
-    'The proof source must clearly show, record, or preserve the relevant action, route, location, screen, sensor feed, transcript, metadata, or outcome for AI-assisted verification.',
+    'The proof source must clearly show, record, or preserve the claim-relevant action, state change, measurement, artifact, or outcome for AI-assisted verification.',
   );
   nextText = nextLines.join('\n');
   nextLines = appendLineIfMissing(
@@ -196,7 +255,7 @@ function strengthenLiveSetupRewrite(content) {
     nextLines,
     nextText,
     ['saved', 'archive', 'link', 'clip', 'recording remains'],
-    'Saved recordings, clips, GPS or device metadata, and evidence links will remain available for AI-assisted review.',
+    getRelevantSavedEvidenceLine(content),
   );
 
   return nextLines.join('\n');
@@ -245,14 +304,14 @@ function fallbackRewrite(claim, section) {
 
 function getRewriteSystemPrompt(section) {
   if (section === 'proofRules') {
-    return 'Rewrite Klaimd proof rules for an AI-assisted verification platform. Return strict JSON with rewrittenClaim and explanation. Preserve the user intent and all user-provided facts. Accuracy is mandatory: do not invent or guess facts, dates, distances, time targets, named places, exact addresses, route names, or measurements unless they appear in the original text. Make the proof rules specific, durable, reviewable, machine-checkable where possible, and constrained to the claim window. Prefer one rule per line. Add live proof code, stream-start requirement, timestamped evidence, saved recording/artifact, witness/recorder, GPS, device metadata, transcript, evidence links, or independently checkable evidence only when stated by the user or as a generic proof source without guessing measurements. Include enough structure for an AI verifier to inspect what happened, when it happened, and whether the outcome was met. Do not add unsafe or illegal behavior.';
+    return 'Rewrite Klaimd proof rules for an AI-assisted verification platform. Return strict JSON with rewrittenClaim and explanation. Preserve the user intent and all user-provided facts. Accuracy and relevance are mandatory: do not invent or guess facts, dates, distances, time targets, named places, exact addresses, route names, measurements, devices, locations, or proof mechanisms unless they appear in the original text or are directly required by the claim activity. Make every proof rule directly related to the specific claim outcome. Do not add GPS/location/route proof unless the claim involves movement, distance, arrival, travel, or place. Do not add screen-share proof unless the claim involves a screen or digital artifact. Do not add receipts/documents unless the claim involves payment, purchase, donation, message, document, or public record. For physical/object claims, prefer relevant camera angles, close-ups, before/after state, counts, measurements, continuous/timestamped video, witness/recorder, saved clips, and artifacts. Include live proof code, stream-start requirement, timestamped evidence, and saved reviewable evidence when relevant. Prefer one rule per line. Include enough structure for an AI verifier to inspect what happened, when it happened, and whether the outcome was met. Do not add unsafe or illegal behavior.';
   }
 
   if (section === 'liveSetup') {
-    return 'Rewrite Klaimd live proof setup for an AI-assisted verification platform. Return strict JSON with rewrittenClaim and explanation. Preserve the user intent and all user-provided facts. Accuracy is mandatory: do not invent or guess facts, dates, distances, time targets, named places, exact addresses, route names, or measurements unless they appear in the original text. Make the setup clear about capture devices or sources, coverage, continuity from start to finish, saved recordings/evidence links, metadata/GPS/transcript availability when applicable, and any witness or recorder support. Include enough structure for an AI verifier to inspect timestamps, camera coverage, saved artifacts, and objective outcome evidence. Keep it concise and practical. Do not add unsafe or illegal behavior.';
+    return 'Rewrite Klaimd live proof setup for an AI-assisted verification platform. Return strict JSON with rewrittenClaim and explanation. Preserve the user intent and all user-provided facts. Accuracy and relevance are mandatory: do not invent or guess facts, dates, distances, time targets, named places, exact addresses, route names, measurements, devices, locations, or proof mechanisms unless they appear in the original text or are directly required by the claim activity. The setup must explain how to capture the actual claim, not generic proof. Do not add GPS/location/route proof unless the claim involves movement, distance, arrival, travel, or place. Do not add screen-share proof unless the claim involves a screen or digital artifact. Do not add receipts/documents unless the claim involves payment, purchase, donation, message, document, or public record. For physical/object claims, prefer relevant camera angles, close-ups, before/after state, counts, measurements, continuous/timestamped video, witness/recorder, saved clips, and artifacts. Include enough structure for an AI verifier to inspect timestamps, camera coverage, saved artifacts, and objective outcome evidence. Keep it concise and practical. Do not add unsafe or illegal behavior.';
   }
 
-  return 'Rewrite Klaimd claim titles for an AI-assisted verification platform. Return strict JSON with rewrittenClaim and explanation. Preserve the claimer intent, but make the claim specific, exciting, durable, provable, and constrained to the claim window. Accuracy is mandatory: do not invent or guess facts. Do not add calendar dates, distances, pace targets, time targets, named places, exact addresses, route names, or measurements unless they appear in the original claim. If a measurement is unknown, say it must be proven by live, GPS, timestamped, witness, metadata, or recorded evidence instead of guessing a number. The rewrittenClaim must be a future-tense commitment that starts exactly with "I will". Never write as if the claimer already completed it. Never use phrases like "I successfully completed", "I proved", "I have", "I ran", or "proving I can". If no deadline is provided, say "by the declared deadline" or "within the declared claim window". Include live proof, proof code or stream-start constraint, timestamped evidence, saved AI-reviewable proof, objective outcome, and deadline/window language. Keep it as one first-person claim sentence. Do not add unsafe or illegal behavior.';
+  return 'Rewrite Klaimd claim titles for an AI-assisted verification platform. Return strict JSON with rewrittenClaim and explanation. Preserve the claimer intent, but make the claim specific, exciting, durable, provable, and constrained to the claim window. Accuracy and relevance are mandatory: do not invent or guess facts, proof sources, devices, places, or mechanisms. Do not add calendar dates, distances, pace targets, time targets, named places, exact addresses, route names, or measurements unless they appear in the original claim. If a measurement is unknown, say it must be proven by live, timestamped, witness, metadata, recorded, or other claim-relevant evidence instead of guessing a number. Use GPS/location/route language only when the claim involves movement, distance, arrival, travel, or place. The rewrittenClaim must be a future-tense commitment that starts exactly with "I will". Never write as if the claimer already completed it. Never use phrases like "I successfully completed", "I proved", "I have", "I ran", or "proving I can". If no deadline is provided, say "by the declared deadline" or "within the declared claim window". Include live proof, proof code or stream-start constraint, timestamped evidence, saved AI-reviewable proof, objective outcome, and deadline/window language. Keep it as one first-person claim sentence. Do not add unsafe or illegal behavior.';
 }
 
 async function rewriteWithOpenAi(claim, fallback, section) {

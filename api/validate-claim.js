@@ -166,7 +166,7 @@ function runRubric(claim) {
       hasDurableEvidence
         ? 'The outcome can leave a timestamped or reviewable evidence trail.'
         : 'The claim does not yet explain what durable evidence remains after the attempt.',
-      'Mention video, live stream, timestamped check-ins, transcript, receipt, public artifact, recorder, or witness.',
+      'Mention claim-relevant saved evidence such as video, close-up photos, timestamped clips, transcript, receipt, public artifact, recorder, or witness.',
     ),
     scoreCriterion(
       'Provable outcome',
@@ -211,8 +211,8 @@ function runProofRulesRubric(content) {
   const lines = normalized.split(/\n+/).map((line) => line.trim()).filter(Boolean);
   const hasMultipleRules = lines.length >= 2 || normalized.length >= 140;
   const hasLiveStart = hasAny(lower, ['live', 'stream', 'proof code', 'start', 'before', 'window']);
-  const hasDurableEvidence = hasAny(lower, ['record', 'recording', 'video', 'clip', 'gps', 'timestamp', 'saved', 'link', 'photo', 'metadata', 'transcript']);
-  const hasObjectiveOutcome = hasAny(lower, ['gps', 'location', 'distance', 'finish', 'reach', 'timestamp', 'measured', 'visible', 'check', 'metadata']);
+  const hasDurableEvidence = hasAny(lower, ['record', 'recording', 'video', 'clip', 'timestamp', 'saved', 'link', 'photo', 'metadata', 'transcript', 'artifact']);
+  const hasObjectiveOutcome = hasAny(lower, ['finish', 'reach', 'timestamp', 'measured', 'visible', 'check', 'metadata', 'count', 'height', 'completed', 'before', 'after']);
   const hasIndependentReview = hasAny(lower, ['ai', 'witness', 'recorder', 'friend', 'partner', 'review', 'verify', 'independently', 'public']);
 
   const criteria = [
@@ -241,7 +241,7 @@ function runProofRulesRubric(content) {
       hasDurableEvidence
         ? 'The proof can leave saved evidence after the live attempt.'
         : 'The rules do not clearly say what saved evidence remains after the event.',
-      'Mention recorded video, GPS page, metadata, timestamped clips, saved stream, photo evidence, transcript, or evidence links.',
+      'Mention evidence that matches the claim: recorded video, close-up photos, before/after state, measurements/counts, metadata, timestamped clips, saved stream, transcript, or evidence links.',
     ),
     scoreCriterion(
       'Objective outcome',
@@ -393,7 +393,7 @@ function runLiveSetupRubric(content) {
       hasCaptureDevice
         ? 'The setup names at least one live capture source.'
         : 'The setup does not yet say what device or source records the attempt.',
-      'Name the recording source, live feed, screen share, GPS/device tracker, sensor, transcript, or public proof feed.',
+      'Name the recording source or relevant proof source: live feed, camera angle, screen share, sensor, transcript, public proof feed, or preserved artifact.',
     ),
     scoreCriterion(
       'Useful coverage',
@@ -402,7 +402,7 @@ function runLiveSetupRubric(content) {
       hasCoverage
         ? 'The setup explains what the proof source will capture or preserve.'
         : 'The setup does not yet explain what reviewers will actually see.',
-      'Describe the angle, route/location coverage, screen view, sensor feed, transcript, metadata, or outcome artifact.',
+      'Describe what reviewers will see or inspect: camera angle, object/state coverage, screen view, sensor feed, transcript, metadata, measurement, or outcome artifact.',
     ),
     scoreCriterion(
       'Independent support',
@@ -528,7 +528,7 @@ function getValidatorMessages(claim, section) {
     {
       role: 'system',
       content:
-        `You review Klaimd ${sectionLabel} for an AI-assisted verification platform. Return strict JSON with claimable boolean, score 0-100, verdict, summary, criteria array, suggestions array. Each criteria item must have name, passed, reason, suggestion. A Klaimd setup is claimable only if it is specific, durable, provable, and constrained to the claim window. For proof rules and live setup, focus on evidence quality, saved artifacts, AI-verifier confidence, live-start integrity, metadata/timestamps/GPS/transcripts where useful, and whether the outcome can be independently checked. Reject vague wording that requires trusting the claimer without live, timestamped, recorded, GPS, metadata, witness, public, AI-reviewable, or independently checkable evidence.`,
+        `You review Klaimd ${sectionLabel} for an AI-assisted verification platform. Return strict JSON with claimable boolean, score 0-100, verdict, summary, criteria array, suggestions array. Each criteria item must have name, passed, reason, suggestion. A Klaimd setup is claimable only if it is specific, durable, provable, constrained to the claim window, and uses proof that is directly relevant to the claim activity. For proof rules and live setup, focus on evidence quality, saved artifacts, AI-verifier confidence, live-start integrity, timestamps, and whether the outcome can be independently checked. Do not suggest generic proof sources that do not fit the claim. Only suggest GPS/location/route evidence when the claim involves movement, distance, arrival, travel, or place. Only suggest screen-share evidence when the claim involves a screen or digital artifact. Only suggest receipts/documents when the claim involves payment, purchase, donation, message, document, or public record. For physical/object claims, suggest relevant camera angles, close-ups, before/after state, counts, measurements, continuous/timestamped video, witness/recorder, saved clips, and preserved artifacts. Reject vague wording that requires trusting the claimer without live, timestamped, recorded, witness, public, AI-reviewable, or independently checkable evidence.`,
     },
     {
       role: 'user',

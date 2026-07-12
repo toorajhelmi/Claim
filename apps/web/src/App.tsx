@@ -2977,8 +2977,8 @@ const claimWizardSteps: ClaimWizardStep[] = [
   {
     key: 'liveSetup',
     label: 'How will the live proof be recorded?',
-    helper: 'Describe phones, recorders, witnesses, screen share, or other proof sources.',
-    placeholder: 'Claimer phone, recorder phone, witness, screen share, public stream, location check-ins...',
+    helper: 'Describe proof sources that directly show this claim being attempted and completed.',
+    placeholder: 'Camera angle, recorder or witness, screen share, object/state close-ups, saved artifact, public source, or other claim-relevant proof...',
     fieldType: 'textarea',
     rows: 4,
     required: true,
@@ -4913,7 +4913,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                   >
                     <span>{setup.externalProof ? 'Enabled' : 'Disabled'}</span>
                     <strong>External proof source</strong>
-                    <p>Public feed, GPS/sensor export, transcript, or artifact remains reviewable.</p>
+                    <p>Public feed, sensor export, transcript, object/state artifact, or other relevant proof remains reviewable.</p>
                     {recorderSuggestion.externalRecommended ? <small>Required by current claim</small> : <small>Optional add-on</small>}
                   </button>
                 </div>
@@ -5007,7 +5007,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                           <input
                             value={setup.externalProofLabel}
                             onChange={(event) => updateActivationSetup({ externalProofLabel: event.target.value })}
-                            placeholder="GPS app, public feed, transcript..."
+                            placeholder="Public feed, transcript, saved artifact, sensor export..."
                           />
                         </label>
                         <label>
@@ -5763,15 +5763,15 @@ function ClaimLivePage({ slug }: { slug: string }) {
           <div className="live-room-card-list evidence-card-list">
             <div className="live-room-card">
               <strong>Links</strong>
-              <span>GPT/chat links, public posts, GPS activity links, receipts, docs, repo links, and third-party proof pages.</span>
+              <span>Chat links, public posts, receipts, docs, repo links, activity records, and third-party proof pages.</span>
             </div>
             <div className="live-room-card">
               <strong>Uploads</strong>
-              <span>Photos, screenshots, short clips, route captures, device metadata exports, and signed recorder notes.</span>
+              <span>Photos, screenshots, short clips, relevant activity records, device metadata exports, and signed recorder notes.</span>
             </div>
             <div className="live-room-card">
               <strong>Checkpoints</strong>
-              <span>Timestamped proof code, supporter-selected constraints, location check-ins, and before/after state captures.</span>
+              <span>Timestamped proof code, supporter-selected constraints, relevant check-ins, and before/after state captures.</span>
             </div>
           </div>
         </section> : null}
