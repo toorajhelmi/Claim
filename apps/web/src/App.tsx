@@ -3224,7 +3224,10 @@ function CreateClaimPage() {
       return;
     }
 
-    updateSectionReview(section, { rewriteStatus: 'rewriting' });
+    updateSectionReview(section, {
+      rewriteStatus: 'rewriting',
+      status: 'checking',
+    });
     setMessage('');
 
     let response: Response;
@@ -3238,14 +3241,14 @@ function CreateClaimPage() {
         body: JSON.stringify({ claim, section }),
       });
     } catch {
-      updateSectionReview(section, { rewriteStatus: 'error' });
+      updateSectionReview(section, { rewriteStatus: 'error', status: 'failed' });
       setMessage(`Could not rewrite ${reviewableStepLabels[section].toLowerCase()}. Try again.`);
       return;
     }
 
     if (!response.ok) {
       const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
-      updateSectionReview(section, { rewriteStatus: 'error' });
+      updateSectionReview(section, { rewriteStatus: 'error', status: 'failed' });
       setMessage(errorBody?.error ?? `Could not rewrite ${reviewableStepLabels[section].toLowerCase()}. Try again.`);
       return;
     }
@@ -3254,25 +3257,22 @@ function CreateClaimPage() {
     const rewrittenClaim = rewrite.rewrittenClaim.trim();
 
     if (!rewrittenClaim) {
-      updateSectionReview(section, { rewriteStatus: 'error' });
+      updateSectionReview(section, { rewriteStatus: 'error', status: 'failed' });
       setMessage(`Could not rewrite ${reviewableStepLabels[section].toLowerCase()}. Try adding more detail first.`);
       return;
     }
 
-    setValues((currentValues) => ({
-      ...currentValues,
-      [section]: rewrittenClaim,
-    }));
-    updateSectionReview(section, {
-      lastRewrite: rewrittenClaim,
-      originalBeforeRewrite: claim,
-    });
-
     try {
       const review = await reviewSectionValue(section, rewrittenClaim);
+      setValues((currentValues) => ({
+        ...currentValues,
+        [section]: rewrittenClaim,
+      }));
       updateSectionReview(section, {
         review,
         lastReviewed: rewrittenClaim,
+        lastRewrite: rewrittenClaim,
+        originalBeforeRewrite: claim,
         status: review.claimable ? 'passed' : 'failed',
         rewriteStatus: 'idle',
       });
@@ -3284,7 +3284,7 @@ function CreateClaimPage() {
     } catch (error) {
       updateSectionReview(section, {
         review: null,
-        status: 'idle',
+        status: 'failed',
         lastReviewed: '',
         rewriteStatus: 'error',
       });
@@ -3599,7 +3599,7 @@ function ClaimabilityPanel({
     return (
       <div className="claimability-panel">
         <p className="eyebrow">AI {label.toLowerCase()} review</p>
-        <strong>Checking whether this is strong enough...</strong>
+        <strong>{rewriteStatus === 'rewriting' ? 'Rewriting and reviewing...' : 'Checking whether this is strong enough...'}</strong>
       </div>
     );
   }
