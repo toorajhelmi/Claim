@@ -598,6 +598,15 @@ type HomePledge = {
   created_at: string;
 };
 
+type HomeVote = {
+  claim_id: string;
+  voter_email: string;
+};
+
+type HomeEvidenceRow = {
+  claim_id: string;
+};
+
 type HomeClaimCard = {
   claim: Claim;
   relationships: string[];
@@ -643,7 +652,9 @@ type UnifiedHomeData = {
   supportedClaims: Claim[];
   recorderInvites: RecorderInvite[];
   recorderClaims: Claim[];
+  evidenceClaimIds: Set<string>;
   pledgesByClaimId: Map<string, HomePledge>;
+  votedClaimIds: Set<string>;
 };
 
 const finalOrReviewClaimStatuses: ClaimStatus[] = ['under_review', 'verified', 'not_proven', 'cancelled', 'disputed'];
@@ -708,6 +719,39 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
         fetchClaimsByIds(pledgedRows.map((pledge) => pledge.claim_id)),
         fetchClaimsByIds(recorderRows.map((invite) => invite.claim_id)),
       ]);
+      const supportedClaimIds = supportedClaims.map((claim) => claim.id);
+      const [voteRows, proofRows, checkinRows, recordingRows] = supportedClaimIds.length > 0
+        ? await Promise.all([
+          supabase
+            .from('claim_votes')
+            .select('claim_id, voter_email')
+            .in('claim_id', supportedClaimIds)
+            .ilike('voter_email', userEmail),
+          supabase
+            .from('claim_proof_events')
+            .select('claim_id')
+            .in('claim_id', supportedClaimIds),
+          supabase
+            .from('claim_checkins')
+            .select('claim_id')
+            .in('claim_id', supportedClaimIds),
+          supabase
+            .from('claim_live_rooms')
+            .select('claim_id')
+            .in('claim_id', supportedClaimIds)
+            .not('recording_url', 'is', null),
+        ])
+        : [
+          { data: [] },
+          { data: [] },
+          { data: [] },
+          { data: [] },
+        ];
+      const evidenceClaimIds = new Set([
+        ...((proofRows.data ?? []) as HomeEvidenceRow[]).map((row) => row.claim_id),
+        ...((checkinRows.data ?? []) as HomeEvidenceRow[]).map((row) => row.claim_id),
+        ...((recordingRows.data ?? []) as HomeEvidenceRow[]).map((row) => row.claim_id),
+      ]);
       const metadata = currentUser.user_metadata;
       const profileData = profile.data as { display_name?: string | null; contact_email?: string | null } | null;
 
@@ -724,7 +768,9 @@ function UnifiedAppPage({ activeTab }: { activeTab: UnifiedAppTabKey }) {
         supportedClaims,
         recorderInvites: recorderRows,
         recorderClaims,
+        evidenceClaimIds,
         pledgesByClaimId: new Map(pledgedRows.map((pledge) => [pledge.claim_id, pledge])),
+        votedClaimIds: new Set(((voteRows.data ?? []) as HomeVote[]).map((vote) => vote.claim_id)),
       });
       setLoading(false);
     }
@@ -1312,8 +1358,9 @@ function createHomeActionCards(
   });
 
   supportedCards.forEach((card) => {
+    const pledge = homeData.pledgesByClaimId.get(card.claim.id);
+
     if (card.claim.status === 'live') {
-      const pledge = homeData.pledgesByClaimId.get(card.claim.id);
       actions.push({
         id: `support-live-${card.claim.id}`,
         claimId: card.claim.id,
@@ -1322,6 +1369,22 @@ function createHomeActionCards(
         detail: `You already pledged${pledge ? ` ${formatMoney(pledge.amount_cents)}` : ''}. Watch the proof as it happens.`,
         href: getClaimLivePath(card.claim),
         ctaLabel: 'Watch live',
+      });
+    }
+
+    const votingWindow = getVotingWindow(card.claim, null);
+    const hasEvidence = homeData.evidenceClaimIds.has(card.claim.id);
+    const hasVoted = homeData.votedClaimIds.has(card.claim.id);
+
+    if (card.claim.status === 'under_review' && votingWindow.isOpen && hasEvidence && !hasVoted) {
+      actions.push({
+        id: `support-vote-${card.claim.id}`,
+        claimId: card.claim.id,
+        title: card.claim.title,
+        label: 'Vote pending',
+        detail: `Evidence is posted. Cast your supporter vote before ${formatDateTime(votingWindow.end)}.`,
+        href: getClaimResultPath(card.claim),
+        ctaLabel: 'Vote now',
       });
     }
   });
