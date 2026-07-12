@@ -31,7 +31,7 @@ async function getAuthedUser(request, supabaseUrl, publishableKey) {
   return { user: data.user ?? null, error: error?.message };
 }
 
-function computeSettlement({ claim, decision, pledges, platformCommissionBps }) {
+function computeSettlement({ claim, decision, donationSetting, pledges, platformCommissionBps }) {
   const grossPledgeCents = pledges
     .filter((pledge) => ['intent', 'authorized', 'collected'].includes(pledge.status))
     .reduce((total, pledge) => total + Number(pledge.amount_cents || 0), 0);
@@ -46,14 +46,82 @@ function computeSettlement({ claim, decision, pledges, platformCommissionBps }) 
       .filter((pledge) => pledge.wants_donate)
       .reduce((total, pledge) => total + Number(pledge.amount_cents || 0), 0)
     : 0;
+  const successDonationCents = decision === 'accepted' && donationSetting
+    ? Math.floor(netPledgeCents * Number(donationSetting.success_donation_bps || 0) / 10000)
+    : 0;
 
   return {
-    donation_cents: donationCents,
+    donation_cents: decision === 'accepted' ? successDonationCents : donationCents,
+    failure_donation_cents: donationCents,
     gross_pledge_cents: grossPledgeCents,
     locked_amount_cents: lockedAmountCents,
     net_locked_amount_cents: netLockedAmountCents,
     net_pledge_cents: netPledgeCents,
+    success_donation_cents: successDonationCents,
   };
+}
+
+async function upsertCharityPaymentTasks({ claimId, decision, donationSetting, settlement, supabaseAdmin }) {
+  if (!donationSetting) {
+    return;
+  }
+
+  const paymentTasks = [];
+
+  if (decision === 'accepted' && settlement.success_donation_cents > 0) {
+    paymentTasks.push({
+      amount_cents: settlement.success_donation_cents,
+      admin_notes: null,
+      claim_id: claimId,
+      completed_at: null,
+      invoice_url: null,
+      organization_id: donationSetting.organization_id,
+      payment_url: null,
+      payment_reason: 'success_share',
+      receipt_url: null,
+      status: 'pending',
+    });
+  }
+
+  if (decision === 'declined' && settlement.failure_donation_cents > 0) {
+    paymentTasks.push({
+      amount_cents: settlement.failure_donation_cents,
+      admin_notes: null,
+      claim_id: claimId,
+      completed_at: null,
+      invoice_url: null,
+      organization_id: donationSetting.organization_id,
+      payment_url: null,
+      payment_reason: 'supporter_failure_donation',
+      receipt_url: null,
+      status: 'pending',
+    });
+  }
+
+  if (paymentTasks.length > 0) {
+    const { error } = await supabaseAdmin
+      .from('claim_charity_payments')
+      .upsert(paymentTasks, { onConflict: 'claim_id,payment_reason' });
+
+    if (error) {
+      throw error;
+    }
+  }
+
+  const activeReasons = paymentTasks.map((task) => task.payment_reason);
+  const { error: cancelError } = await supabaseAdmin
+    .from('claim_charity_payments')
+    .update({
+      status: 'cancelled',
+      admin_notes: 'Cancelled because the latest outcome no longer creates this charity payment.',
+    })
+    .eq('claim_id', claimId)
+    .not('payment_reason', 'in', `(${activeReasons.map((reason) => `"${reason}"`).join(',') || '""'})`)
+    .eq('status', 'pending');
+
+  if (cancelError) {
+    throw cancelError;
+  }
 }
 
 module.exports = async function handler(request, response) {
@@ -127,6 +195,17 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  const { data: donationSetting, error: donationSettingError } = await supabaseAdmin
+    .from('claim_donation_settings')
+    .select('claim_id, organization_id, success_donation_bps')
+    .eq('claim_id', claim.id)
+    .maybeSingle();
+
+  if (donationSettingError) {
+    response.status(400).json({ error: donationSettingError.message });
+    return;
+  }
+
   const now = new Date();
   const publishedAt = now.toISOString();
   const appealDeadlineAt = addHours(now, 24);
@@ -143,6 +222,7 @@ module.exports = async function handler(request, response) {
   const settlement = computeSettlement({
     claim,
     decision,
+    donationSetting,
     pledges: pledges ?? [],
     platformCommissionBps,
   });
@@ -205,6 +285,19 @@ module.exports = async function handler(request, response) {
 
   if (settlementError) {
     response.status(400).json({ error: settlementError.message });
+    return;
+  }
+
+  try {
+    await upsertCharityPaymentTasks({
+      claimId: claim.id,
+      decision,
+      donationSetting,
+      settlement,
+      supabaseAdmin,
+    });
+  } catch (charityPaymentError) {
+    response.status(400).json({ error: charityPaymentError.message });
     return;
   }
 

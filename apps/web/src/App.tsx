@@ -208,6 +208,40 @@ type ClaimSettlement = {
   processed_at: string | null;
 };
 
+type DonationOrganization = {
+  id: string;
+  name: string;
+  every_org_identifier: string;
+  ein: string | null;
+  logo_url: string | null;
+  profile_url: string | null;
+  description: string | null;
+  status: 'active' | 'inactive';
+};
+
+type ClaimDonationSetting = {
+  claim_id: string;
+  organization_id: string;
+  success_donation_bps: number;
+  public_note: string | null;
+  locked_at: string | null;
+};
+
+type ClaimCharityPayment = {
+  id: string;
+  claim_id: string;
+  organization_id: string;
+  payment_reason: 'success_share' | 'supporter_failure_donation' | 'manual_adjustment';
+  amount_cents: number;
+  status: 'pending' | 'completed' | 'cancelled';
+  payment_url: string | null;
+  invoice_url: string | null;
+  receipt_url: string | null;
+  admin_notes: string | null;
+  completed_at: string | null;
+  created_at: string;
+};
+
 type UserPaymentMethod = {
   id: string;
   brand: string | null;
@@ -290,6 +324,9 @@ type ClaimBundle = {
   result: ClaimResult | null;
   adminDecisions: ClaimAdminDecision[];
   settlement: ClaimSettlement | null;
+  donationOrganizations: DonationOrganization[];
+  donationSetting: ClaimDonationSetting | null;
+  charityPayments: ClaimCharityPayment[];
 };
 
 type ClaimDetailTabKey = 'overview' | 'backing' | 'proof' | 'live';
@@ -2336,10 +2373,17 @@ function TermsPage() {
           </p>
           <h2>Reimbursements and payout rules</h2>
           <ul>
-            <li>If accepted, pledged funds minus platform commission are paid to the claimer or donated once donation flow exists.</li>
+            <li>If accepted, pledged funds minus platform commission are paid to the claimer, except any claim-level charity percentage selected by the claimer.</li>
             <li>If declined, the locked amount minus platform commission is distributed among supporters who did not choose donation.</li>
             <li>If cancelled before the pledge pool reaches the locked amount minus commission, the claimer gets the full locked amount back and supporters receive their full pledges back. No platform commission is charged.</li>
           </ul>
+          <h2>Charity payments</h2>
+          <p>
+            A claimer may attach an approved charity to a claim and choose what percentage of a verified claim payout is
+            donated. If a charity is attached, supporters may also choose to donate their declined-claim return instead of
+            receiving it. During the MVP, charity payments are completed manually by admin through the charity payment
+            provider, then marked complete with receipt or invoice proof.
+          </p>
           <p className="terms-note">
             Payment provider transfers, donations, refunds, and account termination are currently represented as admin ledger actions until the production payout provider flow is enabled.
           </p>
@@ -2358,8 +2402,11 @@ function AdminPage() {
   const [appeals, setAppeals] = useState<ClaimAppeal[]>([]);
   const [results, setResults] = useState<ClaimResult[]>([]);
   const [settlements, setSettlements] = useState<ClaimSettlement[]>([]);
+  const [donationOrganizations, setDonationOrganizations] = useState<DonationOrganization[]>([]);
+  const [donationSettings, setDonationSettings] = useState<ClaimDonationSetting[]>([]);
+  const [charityPayments, setCharityPayments] = useState<ClaimCharityPayment[]>([]);
   const [message, setMessage] = useState('');
-  const [adminTab, setAdminTab] = useState<'claims' | 'appeals'>('claims');
+  const [adminTab, setAdminTab] = useState<'claims' | 'appeals' | 'charity'>('claims');
   const [claimStatusFilter, setClaimStatusFilter] = useState<'all' | ClaimStatus>('all');
   const [minPledgedFilter, setMinPledgedFilter] = useState('');
   const [appealOnlyFilter, setAppealOnlyFilter] = useState(false);
@@ -2391,13 +2438,26 @@ function AdminPage() {
     }
 
     setIsAdmin(true);
-    const [claimRows, pledgeRows, voteRows, appealRows, resultRows, settlementRows] = await Promise.all([
+    const [
+      claimRows,
+      pledgeRows,
+      voteRows,
+      appealRows,
+      resultRows,
+      settlementRows,
+      donationOrganizationRows,
+      donationSettingRows,
+      charityPaymentRows,
+    ] = await Promise.all([
       supabase.from('claims').select('*').order('created_at', { ascending: false }).limit(80),
       supabase.from('claim_pledges').select('id, claim_id, supporter_name, supporter_handle, supporter_email, amount_cents, status, wants_donate, created_at').order('created_at', { ascending: false }).limit(200),
       supabase.from('claim_votes').select('*').order('created_at', { ascending: false }).limit(200),
       supabase.from('claim_appeals').select('*').order('created_at', { ascending: false }).limit(200),
       supabase.from('claim_results').select('*').order('published_at', { ascending: false }).limit(120),
       supabase.from('claim_settlements').select('*').order('created_at', { ascending: false }).limit(120),
+      supabase.from('donation_organizations').select('id, name, every_org_identifier, ein, logo_url, profile_url, description, status').order('name'),
+      supabase.from('claim_donation_settings').select('*').order('created_at', { ascending: false }).limit(200),
+      supabase.from('claim_charity_payments').select('*').order('created_at', { ascending: false }).limit(200),
     ]);
 
     setClaims((claimRows.data ?? []) as Claim[]);
@@ -2406,6 +2466,9 @@ function AdminPage() {
     setAppeals((appealRows.data ?? []) as ClaimAppeal[]);
     setResults((resultRows.data ?? []) as ClaimResult[]);
     setSettlements((settlementRows.data ?? []) as ClaimSettlement[]);
+    setDonationOrganizations((donationOrganizationRows.data ?? []) as DonationOrganization[]);
+    setDonationSettings((donationSettingRows.data ?? []) as ClaimDonationSetting[]);
+    setCharityPayments((charityPaymentRows.data ?? []) as ClaimCharityPayment[]);
     setLoading(false);
   }
 
@@ -2472,6 +2535,36 @@ function AdminPage() {
     await loadAdminData();
   }
 
+  async function submitCharityPaymentUpdate(event: FormEvent<HTMLFormElement>, paymentId: string) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const response = await fetch('/api/update-charity-payment', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sessionData.session?.access_token ? { Authorization: `Bearer ${sessionData.session.access_token}` } : {}),
+      },
+      body: JSON.stringify({
+        adminNotes: String(formData.get('adminNotes') || '').trim(),
+        invoiceUrl: String(formData.get('invoiceUrl') || '').trim(),
+        paymentId,
+        paymentUrl: String(formData.get('paymentUrl') || '').trim(),
+        receiptUrl: String(formData.get('receiptUrl') || '').trim(),
+        status: String(formData.get('status') || 'pending'),
+      }),
+    });
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+
+    if (!response.ok) {
+      setMessage(body?.error ?? 'Could not update charity payment.');
+      return;
+    }
+
+    setMessage('Charity payment updated.');
+    await loadAdminData();
+  }
+
   async function handleAdminSignOut() {
     await supabase.auth.signOut();
     window.location.href = '/';
@@ -2502,6 +2595,12 @@ function AdminPage() {
   const selectedClaimVoteSummary = getVoteSummary(selectedClaimVotes, getDistinctSupporterCount(selectedClaimPledges));
   const selectedClaimResult = selectedClaim ? results.find((result) => result.claim_id === selectedClaim.id) ?? null : null;
   const selectedClaimSettlement = selectedClaim ? settlements.find((settlement) => settlement.claim_id === selectedClaim.id) ?? null : null;
+  const selectedClaimDonationSetting = selectedClaim ? donationSettings.find((setting) => setting.claim_id === selectedClaim.id) ?? null : null;
+  const selectedClaimDonationOrganization = selectedClaimDonationSetting
+    ? donationOrganizations.find((organization) => organization.id === selectedClaimDonationSetting.organization_id) ?? null
+    : null;
+  const selectedClaimCharityPayments = selectedClaim ? charityPayments.filter((payment) => payment.claim_id === selectedClaim.id) : [];
+  const pendingCharityPayments = charityPayments.filter((payment) => payment.status === 'pending');
 
   return (
     <AppChrome adminOnly>
@@ -2521,7 +2620,7 @@ function AdminPage() {
           <Metric label="Claims" value={String(claims.length)} />
           <Metric label="Pledges" value={String(pledges.length)} />
           <Metric label="Pending appeals" value={String(pendingAppeals.length)} />
-          <Metric label="Settlements" value={String(settlements.length)} />
+          <Metric label="Charity payments" value={String(pendingCharityPayments.length)} />
         </section>
         <section className="mvp-panel admin-workspace">
           <div className="admin-tabs" role="tablist" aria-label="Admin operations">
@@ -2530,6 +2629,9 @@ function AdminPage() {
             </button>
             <button className={adminTab === 'appeals' ? 'selected' : ''} type="button" onClick={() => setAdminTab('appeals')}>
               Appeals
+            </button>
+            <button className={adminTab === 'charity' ? 'selected' : ''} type="button" onClick={() => setAdminTab('charity')}>
+              Charity payments
             </button>
           </div>
 
@@ -2600,6 +2702,31 @@ function AdminPage() {
                       Vote signal: accepted {selectedClaimVoteSummary.accepted}, declined {selectedClaimVoteSummary.declined}, threshold {selectedClaimVoteSummary.threshold}.
                       {selectedClaimResult ? ` Last outcome: ${selectedClaimResult.status}.` : ' No outcome yet.'}
                     </p>
+                    {selectedClaimDonationSetting && selectedClaimDonationOrganization ? (
+                      <div className="donation-disclosure">
+                        <p className="eyebrow">Charity setting</p>
+                        <h3>{selectedClaimDonationOrganization.name}</h3>
+                        <p>
+                          Verified outcome share: {formatPercentFromBps(selectedClaimDonationSetting.success_donation_bps)}.
+                          Estimated from current pledges: {formatMoney(getClaimSuccessDonationCents(selectedClaim, selectedClaimDonationSetting))}.
+                        </p>
+                        {selectedClaimSettlement ? (
+                          <p>
+                            Settlement donation amount: {formatMoney(selectedClaimSettlement.donation_cents)}.
+                          </p>
+                        ) : null}
+                        {selectedClaimCharityPayments.length > 0 ? (
+                          <div className="mini-list">
+                            {selectedClaimCharityPayments.map((payment) => (
+                              <div key={payment.id}>
+                                <strong>{getCharityPaymentReasonLabel(payment.payment_reason)} · {formatMoney(payment.amount_cents)}</strong>
+                                <span>{payment.status}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <form className="compact-form admin-outcome-form" onSubmit={(event) => void submitAdminOutcome(event, selectedClaim.id)}>
                       <label>
                         Outcome
@@ -2699,6 +2826,74 @@ function AdminPage() {
               </section>
             </div>
           ) : null}
+
+          {adminTab === 'charity' ? (
+            <div className="admin-split-view">
+              <section className="admin-list-panel">
+                <div className="admin-row-list">
+                  {charityPayments.length === 0 ? <p className="form-message">No charity payments yet.</p> : null}
+                  {charityPayments.map((payment) => {
+                    const paymentClaim = claims.find((claim) => claim.id === payment.claim_id);
+                    const paymentOrganization = donationOrganizations.find((organization) => organization.id === payment.organization_id);
+
+                    return (
+                      <div className="admin-row" key={payment.id}>
+                        <span>{payment.status} · {getCharityPaymentReasonLabel(payment.payment_reason)}</span>
+                        <strong>{paymentOrganization?.name ?? 'Charity'} · {formatMoney(payment.amount_cents)}</strong>
+                        <small>{paymentClaim?.title ?? 'Claim'} · created {formatDateTime(payment.created_at)}</small>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="admin-detail-panel">
+                <p className="eyebrow">Charity payment processing</p>
+                <h2>Attach proof when payment is completed.</h2>
+                <p className="terms-note">
+                  Use the charity profile/payment link, make the manual donation, then attach receipt or invoice URLs before
+                  marking a row completed. These links become visible to claim participants.
+                </p>
+                <div className="admin-payment-list">
+                  {charityPayments.map((payment) => {
+                    const paymentClaim = claims.find((claim) => claim.id === payment.claim_id);
+                    const paymentOrganization = donationOrganizations.find((organization) => organization.id === payment.organization_id);
+
+                    return (
+                      <form className="compact-form admin-charity-payment-card" key={payment.id} onSubmit={(event) => void submitCharityPaymentUpdate(event, payment.id)}>
+                        <div>
+                          <p className="eyebrow">{payment.status}</p>
+                          <h3>{paymentOrganization?.name ?? 'Charity'} · {formatMoney(payment.amount_cents)}</h3>
+                          <p>{paymentClaim?.title ?? 'Claim'} — {getCharityPaymentReasonLabel(payment.payment_reason)}</p>
+                          {paymentOrganization?.profile_url ? (
+                            <a href={paymentOrganization.profile_url} rel="noreferrer" target="_blank">
+                              Open charity profile
+                            </a>
+                          ) : null}
+                        </div>
+                        <label>
+                          Status
+                          <select name="status" defaultValue={payment.status}>
+                            <option value="pending">Pending</option>
+                            <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                        </label>
+                        <FormField label="Payment link" name="paymentUrl" type="url" defaultValue={payment.payment_url ?? ''} />
+                        <FormField label="Invoice URL" name="invoiceUrl" type="url" defaultValue={payment.invoice_url ?? ''} />
+                        <FormField label="Receipt URL" name="receiptUrl" type="url" defaultValue={payment.receipt_url ?? ''} />
+                        <label>
+                          Admin notes
+                          <textarea name="adminNotes" rows={3} defaultValue={payment.admin_notes ?? ''} />
+                        </label>
+                        <button className="button button-primary" type="submit">Save charity proof</button>
+                      </form>
+                    );
+                  })}
+                </div>
+              </section>
+            </div>
+          ) : null}
         </section>
         <section className="mvp-panel">
           <p className="eyebrow">Refunds, reimbursements, and account actions</p>
@@ -2722,6 +2917,9 @@ type ClaimWizardValues = {
   pledgeThreshold: string;
   liveStartsAt: string;
   deadlineAt: string;
+  donationOrganizationId: string;
+  donationSuccessPercent: string;
+  donationNote: string;
 };
 
 type ClaimWizardStep = {
@@ -2861,8 +3059,12 @@ function CreateClaimPage() {
     pledgeThreshold: '500',
     liveStartsAt: '',
     deadlineAt: '',
+    donationOrganizationId: '',
+    donationSuccessPercent: '0',
+    donationNote: '',
   });
   const [claimerProfile, setClaimerProfile] = useState<ClaimerProfile | null>(null);
+  const [donationOrganizations, setDonationOrganizations] = useState<DonationOrganization[]>([]);
   const [authLoading, setAuthLoading] = useState(true);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
@@ -2893,6 +3095,13 @@ function CreateClaimPage() {
         .select('id, display_name, handle, contact_email, primary_platform')
         .eq('id', userData.user.id)
         .maybeSingle();
+      const { data: organizations } = await supabase
+        .from('donation_organizations')
+        .select('id, name, every_org_identifier, ein, logo_url, profile_url, description, status')
+        .eq('status', 'active')
+        .order('name');
+
+      setDonationOrganizations((organizations ?? []) as DonationOrganization[]);
 
       if (profile) {
         setClaimerProfile(profile as ClaimerProfile);
@@ -3138,6 +3347,12 @@ function CreateClaimPage() {
     const proofRules = parseProofRules(refinedValues.proofRules);
     const liveSetup = nullableString(refinedValues.liveSetup);
     const supporterInteraction = nullableString(refinedValues.supporterInteraction);
+    const selectedDonationOrganization = donationOrganizations.find(
+      (organization) => organization.id === refinedValues.donationOrganizationId,
+    );
+    const donationSuccessBps = selectedDonationOrganization
+      ? percentStringToBps(refinedValues.donationSuccessPercent)
+      : 0;
 
     const claimPayload = {
       slug,
@@ -3197,10 +3412,18 @@ function CreateClaimPage() {
       share_description: claimPayload.teaser_description,
       launch_copy: `I am making a ${appConfig.name} claim: ${title}. Back it and watch the proof.`,
     });
+    const { error: donationError } = selectedDonationOrganization
+      ? await supabase.from('claim_donation_settings').insert({
+        claim_id: claim.id,
+        organization_id: selectedDonationOrganization.id,
+        public_note: nullableString(refinedValues.donationNote),
+        success_donation_bps: donationSuccessBps,
+      })
+      : { error: null };
 
-    if (rulesError || shareError) {
+    if (rulesError || shareError || donationError) {
       setStatus('error');
-      setMessage(rulesError?.message ?? shareError?.message ?? 'Claim details could not be saved.');
+      setMessage(rulesError?.message ?? shareError?.message ?? donationError?.message ?? 'Claim details could not be saved.');
       return;
     }
 
@@ -3230,7 +3453,11 @@ function CreateClaimPage() {
           </p>
 
           {isReviewStep ? (
-            <ClaimWizardReview values={values} />
+            <ClaimWizardReview
+              donationOrganizations={donationOrganizations}
+              onChange={updateValue}
+              values={values}
+            />
           ) : (
             <>
               {currentReviewState?.lastRewrite ? null : (
@@ -3424,7 +3651,16 @@ function ClaimabilityPanel({
   );
 }
 
-function ClaimWizardReview({ values }: { values: ClaimWizardValues }) {
+function ClaimWizardReview({
+  donationOrganizations,
+  onChange,
+  values,
+}: {
+  donationOrganizations: DonationOrganization[];
+  onChange: (key: keyof ClaimWizardValues, value: string) => void;
+  values: ClaimWizardValues;
+}) {
+  const selectedOrganization = donationOrganizations.find((organization) => organization.id === values.donationOrganizationId);
   const reviewItems: Array<[string, string]> = [
     ['Claim', values.title],
     ['Proof', values.proofRules],
@@ -3450,6 +3686,58 @@ function ClaimWizardReview({ values }: { values: ClaimWizardValues }) {
             <strong>{value}</strong>
           </div>
         ))}
+      </div>
+      <div className="donation-setup-card">
+        <p className="eyebrow">Optional donation</p>
+        <h3>Attach a charity to this claim.</h3>
+        <p>
+          If you choose a charity, supporters will see it on the claim. You can send a percentage of verified-claim
+          pledge proceeds to the charity, and supporters can choose to donate their failed-claim return too.
+        </p>
+        <label>
+          Charity
+          <select
+            value={values.donationOrganizationId}
+            onChange={(event) => onChange('donationOrganizationId', event.target.value)}
+          >
+            <option value="">No charity for this claim</option>
+            {donationOrganizations.map((organization) => (
+              <option value={organization.id} key={organization.id}>
+                {organization.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedOrganization ? (
+          <>
+            <div className="form-grid">
+              <label>
+                Verified-claim donation %
+                <input
+                  min="0"
+                  max="100"
+                  step="1"
+                  type="number"
+                  value={values.donationSuccessPercent}
+                  onChange={(event) => onChange('donationSuccessPercent', event.target.value)}
+                />
+              </label>
+              <label>
+                Every.org profile
+                <input value={selectedOrganization.profile_url ?? selectedOrganization.every_org_identifier} readOnly />
+              </label>
+            </div>
+            <label>
+              Public donation note
+              <textarea
+                rows={3}
+                value={values.donationNote}
+                onChange={(event) => onChange('donationNote', event.target.value)}
+                placeholder="Why this charity is connected to the claim..."
+              />
+            </label>
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -3719,6 +4007,83 @@ function formatPaymentMethod(method: UserPaymentMethod) {
     : 'expiry saved';
 
   return `${brand} ${last4} · ${expiry}`;
+}
+
+function getDonationOrganization(data: Pick<ClaimBundle, 'donationOrganizations' | 'donationSetting'>) {
+  if (!data.donationSetting) {
+    return null;
+  }
+
+  return data.donationOrganizations.find((organization) => organization.id === data.donationSetting?.organization_id) ?? null;
+}
+
+function getClaimSuccessDonationCents(claim: Claim, donationSetting: ClaimDonationSetting | null, platformCommissionBps = 750) {
+  if (!donationSetting) {
+    return 0;
+  }
+
+  const netPledgeCents = Math.floor(claim.pledge_pool_cents * Math.max(0, 10000 - platformCommissionBps) / 10000);
+  return Math.floor(netPledgeCents * donationSetting.success_donation_bps / 10000);
+}
+
+function getCharityPaymentReasonLabel(reason: ClaimCharityPayment['payment_reason']) {
+  if (reason === 'success_share') return 'Verified claim donation';
+  if (reason === 'supporter_failure_donation') return 'Declined claim supporter donation';
+  return 'Manual charity adjustment';
+}
+
+function DonationDisclosure({
+  charityPayments,
+  claim,
+  donationSetting,
+  organization,
+}: {
+  charityPayments: ClaimCharityPayment[];
+  claim: Claim;
+  donationSetting: ClaimDonationSetting | null;
+  organization: DonationOrganization | null;
+}) {
+  if (!donationSetting || !organization) {
+    return null;
+  }
+
+  const estimatedSuccessDonationCents = getClaimSuccessDonationCents(claim, donationSetting);
+  const completedPayments = charityPayments.filter((payment) => payment.status === 'completed');
+
+  return (
+    <div className="donation-disclosure">
+      <p className="eyebrow">Charity attached</p>
+      <h2>{organization.name}</h2>
+      <p>
+        If this claim is verified, {formatPercentFromBps(donationSetting.success_donation_bps)} of the net pledged amount
+        is marked for donation to {organization.name}
+        {estimatedSuccessDonationCents > 0 ? ` (currently about ${formatMoney(estimatedSuccessDonationCents)})` : ''}.
+      </p>
+      {donationSetting.public_note ? <p>{donationSetting.public_note}</p> : null}
+      <p className="terms-note">
+        If the claim is declined, supporters can choose to donate their return to this charity instead of receiving it.
+      </p>
+      {organization.profile_url ? (
+        <a className="button button-ghost" href={organization.profile_url} rel="noreferrer" target="_blank">
+          View charity profile
+        </a>
+      ) : null}
+      {completedPayments.length > 0 ? (
+        <div className="mini-list">
+          {completedPayments.map((payment) => (
+            <div key={payment.id}>
+              <strong>{getCharityPaymentReasonLabel(payment.payment_reason)} · {formatMoney(payment.amount_cents)}</strong>
+              <span>Payment completed {formatDateTime(payment.completed_at)}.</span>
+              <span className="action-row">
+                {payment.receipt_url ? <a href={payment.receipt_url} rel="noreferrer" target="_blank">Receipt</a> : null}
+                {payment.invoice_url ? <a href={payment.invoice_url} rel="noreferrer" target="_blank">Invoice</a> : null}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function ClaimDetailPage({ slug }: { slug: string }) {
@@ -4450,6 +4815,7 @@ function ClaimDetailPage({ slug }: { slug: string }) {
   const claimDetailPath = getClaimDetailPath(data.claim);
   const claimLivePath = getClaimLivePath(data.claim);
   const claimResultPath = getClaimResultPath(data.claim);
+  const donationOrganization = getDonationOrganization(data);
 
   if (isDraft && isOwner && draftMode === 'activate') {
     const setup = activationSetup ?? readStoredActivationSetup(
@@ -4899,6 +5265,12 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                   title={data.claim.title}
                   description={data.claim.description ?? undefined}
                 />
+                <DonationDisclosure
+                  charityPayments={data.charityPayments}
+                  claim={data.claim}
+                  donationSetting={data.donationSetting}
+                  organization={donationOrganization}
+                />
                 <ShareBar claim={data.claim} />
               </section>
 
@@ -5028,13 +5400,18 @@ function ClaimDetailPage({ slug }: { slug: string }) {
                       min={String(minimumNextPledgeCents / 100)}
                       step="1"
                     />
-                    <label className="donation-option">
-                      <input name="wantsDonate" type="checkbox" />
-                      <span>
-                        <strong>Donate if declined</strong>
-                        <small>If this claim is declined, donate my supporter distribution instead of receiving it.</small>
-                      </span>
-                    </label>
+                    {data.donationSetting && donationOrganization ? (
+                      <label className="donation-option">
+                        <input name="wantsDonate" type="checkbox" />
+                        <span>
+                          <strong>Donate if declined</strong>
+                          <small>
+                            If this claim is declined, donate my supporter distribution to {donationOrganization.name}
+                            instead of receiving it.
+                          </small>
+                        </span>
+                      </label>
+                    ) : null}
                     <p className="terms-note">
                       By pledging, you agree to the <a href="/terms">payment, voting, appeal, and reimbursement terms</a>.
                     </p>
@@ -5565,11 +5942,22 @@ function ClaimResultPage({ slug }: { slug: string }) {
   }
 
   const hasEvidencePackage = data.proofEvents.length > 0 || data.checkins.length > 0 || Boolean(data.liveRoom?.recording_url);
+  const donationOrganization = getDonationOrganization(data);
 
   return (
     <AppChrome>
       <main className="app-page section-shell result-page">
         <ClaimHeader claim={data.claim} />
+        {data.donationSetting && donationOrganization ? (
+          <section className="mvp-panel">
+            <DonationDisclosure
+              charityPayments={data.charityPayments}
+              claim={data.claim}
+              donationSetting={data.donationSetting}
+              organization={donationOrganization}
+            />
+          </section>
+        ) : null}
         <OutcomeVotingPanel
           claim={data.claim}
           currentUserEmail={currentUserEmail}
@@ -6832,6 +7220,9 @@ function useClaimBundle(claimRef: string) {
       result,
       adminDecisions,
       settlement,
+      donationOrganizations,
+      donationSetting,
+      charityPayments,
     ] = await Promise.all([
       supabase.from('claim_proof_rules').select('*').eq('claim_id', claim.id).order('position'),
       supabase.from('claim_pledges').select('id, claim_id, supporter_name, supporter_handle, supporter_email, amount_cents, status, wants_donate, created_at').eq('claim_id', claim.id).order('created_at', { ascending: false }),
@@ -6844,6 +7235,9 @@ function useClaimBundle(claimRef: string) {
       supabase.from('claim_results').select('*').eq('claim_id', claim.id).maybeSingle(),
       supabase.from('claim_admin_decisions').select('id, claim_id, decision, summary, created_at').eq('claim_id', claim.id).order('created_at', { ascending: false }),
       supabase.from('claim_settlements').select('*').eq('claim_id', claim.id).maybeSingle(),
+      supabase.from('donation_organizations').select('id, name, every_org_identifier, ein, logo_url, profile_url, description, status').eq('status', 'active').order('name'),
+      supabase.from('claim_donation_settings').select('*').eq('claim_id', claim.id).maybeSingle(),
+      supabase.from('claim_charity_payments').select('*').eq('claim_id', claim.id).order('created_at', { ascending: false }),
     ]);
 
     setData({
@@ -6859,6 +7253,9 @@ function useClaimBundle(claimRef: string) {
       result: result.data as ClaimResult | null,
       adminDecisions: (adminDecisions.data ?? []) as ClaimAdminDecision[],
       settlement: settlement.data as ClaimSettlement | null,
+      donationOrganizations: (donationOrganizations.data ?? []) as DonationOrganization[],
+      donationSetting: donationSetting.data as ClaimDonationSetting | null,
+      charityPayments: (charityPayments.data ?? []) as ClaimCharityPayment[],
     });
     setLoading(false);
   }
@@ -7262,6 +7659,16 @@ function nullableDateTime(value: FormDataEntryValue | null) {
 
 function dollarsToCents(value: FormDataEntryValue | null) {
   return Math.max(0, Math.round(Number(value || 0) * 100));
+}
+
+function percentStringToBps(value: string) {
+  const percent = Number(value || 0);
+  const clampedPercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+  return Math.round(clampedPercent * 100);
+}
+
+function formatPercentFromBps(bps: number) {
+  return `${Number((bps / 100).toFixed(2)).toString()}%`;
 }
 
 function formatMoney(cents: number) {

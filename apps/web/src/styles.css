@@ -3699,7 +3699,7 @@ h3 {
 
 .admin-tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.5rem;
   padding: 0.35rem;
   border: 1px solid var(--line);
@@ -3824,6 +3824,37 @@ h3 {
 
 .admin-outcome-form {
   align-self: start;
+}
+
+.donation-setup-card,
+.donation-disclosure,
+.admin-charity-payment-card {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid rgba(255, 132, 76, 0.24);
+  border-radius: 1rem;
+  background: rgba(255, 132, 76, 0.08);
+}
+
+.donation-setup-card h3,
+.donation-disclosure h2,
+.donation-disclosure h3,
+.admin-charity-payment-card h3 {
+  margin: 0;
+}
+
+.donation-setup-card p,
+.donation-disclosure p,
+.admin-charity-payment-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.admin-payment-list {
+  display: grid;
+  gap: 1rem;
 }
 
 .payment-method-card,
