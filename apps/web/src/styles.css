@@ -3639,6 +3639,15 @@ h3 {
   gap: 0.9rem;
 }
 
+.result-page {
+  display: grid;
+  gap: clamp(1.25rem, 4vw, 2rem);
+}
+
+.result-page > .mvp-panel {
+  margin: 0;
+}
+
 .live-claim-context-panel {
   display: grid;
   gap: 1rem;

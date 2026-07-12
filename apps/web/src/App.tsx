@@ -5501,22 +5501,16 @@ function ClaimResultPage({ slug }: { slug: string }) {
     );
   }
 
+  const hasEvidencePackage = data.proofEvents.length > 0 || data.checkins.length > 0 || Boolean(data.liveRoom?.recording_url);
+
   return (
     <AppChrome>
-      <main className="app-page section-shell">
+      <main className="app-page section-shell result-page">
         <ClaimHeader claim={data.claim} />
-        <section className="mvp-panel">
-          <p className="eyebrow">Result page scaffold</p>
-          <h2>Evidence package ready for review.</h2>
-          <p>
-            This page will publish the final verified / not proven decision. For the MVP
-            foundation it already displays the proof timeline and check-ins captured during
-            the live room.
-          </p>
-        </section>
         <OutcomeVotingPanel
           claim={data.claim}
           currentUserEmail={currentUserEmail}
+          evidenceReady={hasEvidencePackage}
           isSupporter={isSupporter}
           liveRoom={data.liveRoom}
           onVote={handleVote}
@@ -5532,10 +5526,10 @@ function ClaimResultPage({ slug }: { slug: string }) {
           settlement={data.settlement}
         />
         {outcomeMessage ? <p className="form-message">{outcomeMessage}</p> : null}
-        <section className="mvp-panel replay-panel">
-          <p className="eyebrow">Replay</p>
-          <h2>Recorded event.</h2>
-          {data.liveRoom?.recording_url ? (
+        {data.liveRoom?.recording_url ? (
+          <section className="mvp-panel replay-panel">
+            <p className="eyebrow">Replay</p>
+            <h2>Recorded event.</h2>
             <>
               <video
                 className="event-replay-video"
@@ -5548,13 +5542,11 @@ function ClaimResultPage({ slug }: { slug: string }) {
                 Open recording
               </a>
             </>
-          ) : (
-            <p className="form-message" data-testid="event-replay-missing">
-              Recording is not attached yet. Once LiveKit egress stores the event recording, the replay will appear here.
-            </p>
-          )}
-        </section>
-        <Timeline events={data.proofEvents} checkins={data.checkins} />
+          </section>
+        ) : null}
+        {data.proofEvents.length > 0 || data.checkins.length > 0 ? (
+          <Timeline events={data.proofEvents} checkins={data.checkins} />
+        ) : null}
       </main>
     </AppChrome>
   );
@@ -5563,6 +5555,7 @@ function ClaimResultPage({ slug }: { slug: string }) {
 function OutcomeVotingPanel({
   claim,
   currentUserEmail,
+  evidenceReady,
   isSupporter,
   liveRoom,
   onVote,
@@ -5571,6 +5564,7 @@ function OutcomeVotingPanel({
 }: {
   claim: Claim;
   currentUserEmail: string;
+  evidenceReady: boolean;
   isSupporter: boolean;
   liveRoom: LiveRoomRecord | null;
   onVote: (vote: 'accepted' | 'declined', reason: string) => Promise<void>;
@@ -5593,21 +5587,11 @@ function OutcomeVotingPanel({
       <p className="eyebrow">Supporter vote</p>
       <h2>24-hour supporter signal.</h2>
       <p>
-        Voting opens after the event is ended and the due date has passed. A direction needs
+        Voting opens after the event is complete, evidence is posted, and the due date has passed. A direction needs
         {` ${voteSummary.threshold || 0} of ${supporterCount} supporter vote${supporterCount === 1 ? '' : 's'} `}
         (75%, rounded up). During stabilization, an admin still determines the final outcome regardless of the vote.
       </p>
-      <div className="profile-stat-grid">
-        <Metric label="Accepted votes" value={String(voteSummary.accepted)} />
-        <Metric label="Declined votes" value={String(voteSummary.declined)} />
-        <Metric label="Vote deadline" value={formatDateTime(votingWindow.end)} />
-      </div>
-      {voteSummary.direction ? (
-        <p className="form-message">Supporter signal currently points to {voteSummary.direction}.</p>
-      ) : (
-        <p className="form-message">No 75% supporter direction yet. Admin outcome is required.</p>
-      )}
-      {votingWindow.isOpen && isSupporter && !alreadyVoted ? (
+      {evidenceReady && votingWindow.isOpen && isSupporter && !alreadyVoted ? (
         <div className="compact-form">
           <label>
             Optional vote reason
@@ -5626,10 +5610,22 @@ function OutcomeVotingPanel({
         <p className="terms-note">
           {alreadyVoted
             ? 'You already voted on this claim.'
-            : isSupporter
+            : !evidenceReady
+              ? 'Voting opens after the event evidence is posted.'
+              : isSupporter
               ? 'Voting is not currently open.'
               : 'Only pledged supporters can vote.'}
         </p>
+      )}
+      <div className="profile-stat-grid">
+        <Metric label="Accepted votes" value={String(voteSummary.accepted)} />
+        <Metric label="Declined votes" value={String(voteSummary.declined)} />
+        <Metric label="Vote deadline" value={formatDateTime(votingWindow.end)} />
+      </div>
+      {voteSummary.direction ? (
+        <p className="form-message">Supporter signal currently points to {voteSummary.direction}.</p>
+      ) : (
+        <p className="form-message">No 75% supporter direction yet. Admin outcome is required.</p>
       )}
     </section>
   );
